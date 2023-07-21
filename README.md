@@ -19,11 +19,25 @@ The sole purpose of this class is to load a file and extract the text that is in
 
 ### Using this project
 
+In your cmake file:
+
+```cmake
+set(GLSL_SHADER_INCLUDER_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(<some path here>/GLSL-Shader-Includes SYSTEM)
+target_link_libraries(${PROJECT_NAME} PUBLIC GlslShaderIncluderLib)
+```
+
+Then in your C++ code:
+
 ```cpp
 #include "ShaderIncluder.h"
-```
-```cpp
-std::string sShaderSource = ShaderIncluder::parseFullSourceCode("path/to/shader.extension");
+
+auto result = ShaderIncluder::parseFullSourceCode("path/to/shader.extension");
+if (std::holds_alternative<ShaderIncluder::Error>(result)){
+    // handle error
+    return;
+}
+const auto sFullSourceCode = std::get<std::string>(std::move(result));
 ```
 
 This will (recursively) extract the source code from the first shader file.
