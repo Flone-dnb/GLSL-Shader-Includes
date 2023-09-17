@@ -13,6 +13,12 @@ include(${RELATIVE_CMAKE_HELPERS_PATH}/essential.cmake)
 include(${RELATIVE_CMAKE_HELPERS_PATH}/utils.cmake)
 
 # -------------------------------------------------------------------------------------------------
+#                                            OPTIONS
+# -------------------------------------------------------------------------------------------------
+
+option(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN "Defines whether to enable documentation generation on build or not." ON)
+
+# -------------------------------------------------------------------------------------------------
 #                                          TARGET SOURCES
 # -------------------------------------------------------------------------------------------------
 
@@ -37,7 +43,9 @@ set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER ${PROJECT_FOLDER})
 enable_more_warnings()
 
 # Enable doxygen.
-enable_doxygen(${CMAKE_CURRENT_SOURCE_DIR}/../../docs)
+if (GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN)
+    enable_doxygen(${CMAKE_CURRENT_SOURCE_DIR}/../../docs)
+endif()
 
 # Set C++ standard.
 set(PROJECT_CXX_STANDARD_VERSION 20)

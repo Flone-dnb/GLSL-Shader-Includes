@@ -8,7 +8,7 @@ This fork adds the following changes:
 - Minor project, code style and documentation improvements.
 - Require double quotes for include paths (for example: `#include "Base.glsl"`).
 
-# GLSL Shader Includes
+# GLSL Shader Includer
 
 A utility class which allows the end user to make use of the include statement in a shader file.
 This is a C++ class but any programmer that has basic knowledge of his / her programming language of choice, should be able to quickly convert the code to another language within a couple minutes. It is that simple.
@@ -23,6 +23,7 @@ In your cmake file:
 
 ```cmake
 set(GLSL_SHADER_INCLUDER_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
 add_subdirectory(<some path here>/GLSL-Shader-Includes SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC GlslShaderIncluderLib)
 ```
