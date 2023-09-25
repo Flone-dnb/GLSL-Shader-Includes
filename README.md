@@ -30,14 +30,14 @@ add_subdirectory(<some path here>/GLSL-Shader-Includes SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC GlslShaderIncluderLib)
 ```
 
-`GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
+`GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
 
 ```GLSL
 // ----------------- SomePushConstants.glsl -----------------
 
 layout(push_constant) uniform Indices
 {
-	uint arrayIndex;
+   uint arrayIndex;
 } indices;
 
 // ----------------- myfile.glsl -----------------
@@ -53,7 +53,7 @@ layout(push_constant) uniform Indices
 
 layout(push_constant) uniform Indices
 {
-	uint arrayIndex;
+    uint arrayIndex;
     uint someIndex;
 } indices;
 
