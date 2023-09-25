@@ -44,6 +44,15 @@ public:
         NOTHING_AFTER_INCLUDE,   //< A file has `#include` and nothing else on the same line.
         NO_SPACE_AFTER_KEYWORD,  //< A file has `#include` and no space after this keyword.
         MISSING_QUOTES,          //< A file has `#include` keyword with missing double quotes.
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+        MISSING_STARTING_CURLY_BRACKET_AFTER_APC_KEYWORD, //< Found additional push constants keyword but
+                                                          //< there was no opening curly bracket on the next
+                                                          //< line.
+        NO_PUSH_CONSTANTS_STRUCT, //< Found additional push constants to insert but no `layout(push_constant)`
+                                  //< was found to insert additional push constants to.
+        NO_CLOSING_BRACKET_ON_PUSH_CONSTANTS, //< Push constants struct was found but there's no '}'
+                                              //< character.
+#endif
     };
 
     /**
@@ -57,4 +66,13 @@ public:
      */
     static std::variant<std::string, Error>
     parseFullSourceCode(const std::filesystem::path& pathToShaderSourceFile);
+
+private:
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+    /**
+     * Keyword used to specify variables that should be appended to the actual push constants struct
+     * located in a separate file.
+     */
+    static inline const std::string sAdditionalPushConstantsKeyword = "#additional_push_constants";
+#endif
 };

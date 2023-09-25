@@ -7,6 +7,7 @@ This fork adds the following changes:
 - Add unit tests.
 - Minor project, code style and documentation improvements.
 - Require double quotes for include paths (for example: `#include "Base.glsl"`).
+- Added optional `#additional_push_constants` keyword (see description below).
 
 # GLSL Shader Includer
 
@@ -24,8 +25,38 @@ In your cmake file:
 ```cmake
 set(GLSL_SHADER_INCLUDER_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
+set(GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE) // optional
 add_subdirectory(<some path here>/GLSL-Shader-Includes SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC GlslShaderIncluderLib)
+```
+
+`GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
+
+```GLSL
+// ----------------- SomePushConstants.glsl -----------------
+
+layout(push_constant) uniform Indices
+{
+	uint arrayIndex;
+} indices;
+
+// ----------------- myfile.glsl -----------------
+
+#include "SomePushConstants.glsl"
+
+#additional_push_constants
+{
+    uint someIndex;
+}
+
+// ----------------- resulting myfile.glsl -----------------
+
+layout(push_constant) uniform Indices
+{
+	uint arrayIndex;
+    uint someIndex;
+} indices;
+
 ```
 
 Then in your C++ code:

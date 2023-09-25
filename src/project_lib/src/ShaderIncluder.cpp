@@ -2,6 +2,7 @@
 
 // Standard.
 #include <fstream>
+#include <ranges>
 
 std::variant<std::string, ShaderIncluder::Error>
 ShaderIncluder::parseFullSourceCode(const std::filesystem::path& pathToShaderSourceFile) {
@@ -22,6 +23,11 @@ ShaderIncluder::parseFullSourceCode(const std::filesystem::path& pathToShaderSou
 
     // Define some variables.
     constexpr std::string_view sIncludeKeyword = "#include";
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+    std::vector<std::string> vAdditionalPushConstants;
+    bool bIsFoundAdditionalPushConstantsKeyword = false;
+    bool bIsProcessingAdditionalPushConstants = false;
+#endif
 
     // Open the file.
     std::ifstream file(pathToShaderSourceFile);
@@ -32,6 +38,35 @@ ShaderIncluder::parseFullSourceCode(const std::filesystem::path& pathToShaderSou
     std::string sFullSourceCode;
     std::string sLineBuffer;
     while (std::getline(file, sLineBuffer)) {
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+        // Look for additional push constants keyword.
+        if (sLineBuffer.starts_with(sAdditionalPushConstantsKeyword)) {
+            bIsFoundAdditionalPushConstantsKeyword = true;
+            continue;
+        }
+
+        if (bIsFoundAdditionalPushConstantsKeyword) {
+            if (!bIsProcessingAdditionalPushConstants) {
+                // Expecting to find a curly bracket.
+                if (!sLineBuffer.starts_with('{')) {
+                    return Error::MISSING_STARTING_CURLY_BRACKET_AFTER_APC_KEYWORD;
+                }
+
+                bIsProcessingAdditionalPushConstants = true;
+                continue;
+            }
+
+            if (sLineBuffer.starts_with('}')) {
+                bIsProcessingAdditionalPushConstants = false;
+                bIsFoundAdditionalPushConstantsKeyword = false;
+                continue;
+            }
+
+            vAdditionalPushConstants.push_back(sLineBuffer);
+            continue;
+        }
+#endif
+
         // Look for the include keyword.
         if (sLineBuffer.find(sIncludeKeyword) == std::string::npos) {
             // Just append the line to the final source code string.
@@ -71,13 +106,41 @@ ShaderIncluder::parseFullSourceCode(const std::filesystem::path& pathToShaderSou
 
         // Process included file.
         auto result = parseFullSourceCode(pathToIncludedFile);
-        if (std::holds_alternative<Error>(result)) {
+        if (std::holds_alternative<Error>(result)) [[unlikely]] {
             return std::get<Error>(result);
         }
         sFullSourceCode += std::get<std::string>(std::move(result));
     }
 
     file.close();
+
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+    // Now insert additional push constants.
+    if (!vAdditionalPushConstants.empty()) {
+        // Find where push constants start.
+        const auto iPushConstantsStartPos = sFullSourceCode.find("layout(push_constant)");
+        if (iPushConstantsStartPos == std::string::npos) [[unlikely]] {
+            return Error::NO_PUSH_CONSTANTS_STRUCT;
+        }
+
+        // Look for '}' after push constants.
+        const auto iPushConstantsEndPos = sFullSourceCode.find('}', iPushConstantsStartPos);
+        if (iPushConstantsEndPos == std::string::npos) [[unlikely]] {
+            return Error::NO_CLOSING_BRACKET_ON_PUSH_CONSTANTS;
+        }
+
+        const size_t iAdditionalPushConstantsInsertPos = iPushConstantsEndPos;
+
+        // Insert additional push constants (insert in reserve order because of how `std::string::insert`
+        // below works, to make the resulting order correct).
+        for (auto& sText : vAdditionalPushConstants | std::views::reverse) {
+            if (!sText.ends_with('\n')) {
+                sText += '\n';
+            }
+            sFullSourceCode.insert(iAdditionalPushConstantsInsertPos, sText);
+        }
+    }
+#endif
 
     return sFullSourceCode;
 }
