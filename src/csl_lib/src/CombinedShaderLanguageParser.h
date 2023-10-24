@@ -11,6 +11,8 @@ class CombinedShaderLanguageParser {
 public:
     /** Groups error information. */
     struct Error {
+        Error() = delete;
+
         /**
          * Initializes error.
          *
@@ -32,30 +34,28 @@ public:
     /**
      * Parses the specified file as HLSL code (`#glsl` blocks are ignored and not included).
      *
-     * @param pathToShaderSourceFile Path to the file to process.
+     * @param pathToShaderSourceFile        Path to the file to process.
+     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise full (combined) source code.
      */
-    static std::variant<std::string, Error> parseHlsl(const std::filesystem::path& pathToShaderSourceFile);
+    static std::variant<std::string, Error> parseHlsl(
+        const std::filesystem::path& pathToShaderSourceFile,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
     /**
      * Parses the specified file as GLSL code (`#hlsl` blocks are ignored and not included).
      *
-     * @param pathToShaderSourceFile Path to the file to process.
+     * @param pathToShaderSourceFile        Path to the file to process.
+     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise full (combined) source code.
      */
-    static std::variant<std::string, Error> parseGlsl(const std::filesystem::path& pathToShaderSourceFile);
+    static std::variant<std::string, Error> parseGlsl(
+        const std::filesystem::path& pathToShaderSourceFile,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
 private:
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
-    /**
-     * Keyword used to specify variables that should be appended to the actual push constants struct
-     * located in a separate file.
-     */
-    static inline const std::string sAdditionalPushConstantsKeyword = "#additional_push_constants";
-#endif
-
     /**
      * Looks for the specified keyword in the specified line and calls your callback to process code
      * after keyword (i.e. body).
@@ -92,13 +92,16 @@ private:
     /**
      * Parses the specified file.
      *
-     * @param pathToShaderSourceFile Path to the file to parse.
-     * @param bParseAsHlsl           Whether to parse as HLSL or as GLSL.
+     * @param pathToShaderSourceFile        Path to the file to parse.
+     * @param bParseAsHlsl                  Whether to parse as HLSL or as GLSL.
+     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise parsed source code.
      */
-    static std::variant<std::string, Error>
-    parse(const std::filesystem::path& pathToShaderSourceFile, bool bParseAsHlsl);
+    static std::variant<std::string, Error> parse(
+        const std::filesystem::path& pathToShaderSourceFile,
+        bool bParseAsHlsl,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
     /**
      * Returns input string but with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
@@ -119,9 +122,35 @@ private:
     static void
     replaceSubstring(std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo);
 
-    /** Keyword used to specify HLSL code block/line. */
-    static constexpr std::string_view sHlslKeyword = "#hlsl";
+    /**
+     * Looks for `#include` keyword and if found returns the path it contains.
+     *
+     * @param sLineBuffer                   Line of code.
+     * @param pathToShaderSourceFile        File currently being processed.
+     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
+     *
+     * @return Error if something went wrong, empty if keyword was not found, otherwise included path
+     * that exists.
+     */
+    static std::variant<std::optional<std::filesystem::path>, Error> findIncludePath(
+        std::string& sLineBuffer,
+        const std::filesystem::path& pathToShaderSourceFile,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
     /** Keyword used to specify GLSL code block/line. */
     static constexpr std::string_view sGlslKeyword = "#glsl";
+
+    /** Keyword used to specify HLSL code block/line. */
+    static constexpr std::string_view sHlslKeyword = "#hlsl";
+
+    /** Keyword used to include other files. */
+    static constexpr std::string_view sIncludeKeyword = "#include";
+
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+    /**
+     * Keyword used to specify variables that should be appended to the actual push constants struct
+     * located in a separate file.
+     */
+    static inline const std::string sAdditionalPushConstantsKeyword = "#additional_push_constants";
+#endif
 };

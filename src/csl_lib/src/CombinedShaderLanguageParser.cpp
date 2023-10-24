@@ -4,14 +4,16 @@
 #include <fstream>
 #include <ranges>
 
-std::variant<std::string, CombinedShaderLanguageParser::Error>
-CombinedShaderLanguageParser::parseHlsl(const std::filesystem::path& pathToShaderSourceFile) {
-    return parse(pathToShaderSourceFile, true);
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseHlsl(
+    const std::filesystem::path& pathToShaderSourceFile,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
+    return parse(pathToShaderSourceFile, true, vAdditionalIncludeDirectories);
 }
 
-std::variant<std::string, CombinedShaderLanguageParser::Error>
-CombinedShaderLanguageParser::parseGlsl(const std::filesystem::path& pathToShaderSourceFile) {
-    return parse(pathToShaderSourceFile, false);
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseGlsl(
+    const std::filesystem::path& pathToShaderSourceFile,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
+    return parse(pathToShaderSourceFile, false, vAdditionalIncludeDirectories);
 }
 
 std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::processKeywordCode(
@@ -102,8 +104,10 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
     return {};
 }
 
-std::variant<std::string, CombinedShaderLanguageParser::Error>
-CombinedShaderLanguageParser::parse(const std::filesystem::path& pathToShaderSourceFile, bool bParseAsHlsl) {
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parse(
+    const std::filesystem::path& pathToShaderSourceFile,
+    bool bParseAsHlsl,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
     // Make sure the specified path exists.
     if (!std::filesystem::exists(pathToShaderSourceFile)) [[unlikely]] {
         return Error("can't open file", pathToShaderSourceFile);
@@ -120,7 +124,6 @@ CombinedShaderLanguageParser::parse(const std::filesystem::path& pathToShaderSou
     }
 
     // Define some variables.
-    constexpr std::string_view sIncludeKeyword = "#include";
 #if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
     std::vector<std::string> vAdditionalPushConstants;
 #endif
@@ -201,53 +204,21 @@ CombinedShaderLanguageParser::parse(const std::filesystem::path& pathToShaderSou
         }
 
         // Look for the include keyword.
-        if (sLineBuffer.find(sIncludeKeyword) == std::string::npos) {
+        auto includeResult =
+            findIncludePath(sLineBuffer, pathToShaderSourceFile, vAdditionalIncludeDirectories);
+        if (std::holds_alternative<Error>(includeResult)) [[unlikely]] {
+            return std::get<Error>(std::move(includeResult));
+        }
+        auto optionalIncludedPath = std::get<std::optional<std::filesystem::path>>(std::move(includeResult));
+
+        if (!optionalIncludedPath.has_value()) {
             // Just append the line to the final source code string.
             sFullSourceCode += (bParseAsHlsl ? convertGlslTypesToHlslTypes(sLineBuffer) : sLineBuffer) + "\n";
             continue;
         }
 
-        // Remove the include keyword from the buffer.
-        sLineBuffer.erase(0, sIncludeKeyword.size());
-
-        // Make sure that the line is not empty now.
-        // Even if the line has some character (probably a space) it's still not enough.
-        // Check for `2` in order to not crash when we check for the first quote.
-        if (sLineBuffer.size() < 2) [[unlikely]] {
-            return Error(
-                std::format("expected to find path after #include on line \"{}\"", sLineBuffer),
-                pathToShaderSourceFile);
-        }
-
-        // The first character should be a space now.
-        if (sLineBuffer[0] != ' ') [[unlikely]] {
-            return Error(
-                std::format(
-                    "expected to find 1 empty space character after the keyword on line \"{}\"", sLineBuffer),
-                pathToShaderSourceFile);
-        }
-
-        // The second character and the last one should be quotes.
-        if (sLineBuffer[1] != '\"' || !sLineBuffer.ends_with("\"")) [[unlikely]] {
-            return Error(
-                std::format(
-                    "expected to find open/close quotes between the included path on line \"{}\"",
-                    sLineBuffer),
-                pathToShaderSourceFile);
-        }
-
-        // Erase a space and a quote.
-        sLineBuffer.erase(0, 2);
-
-        // Erase last quote.
-        sLineBuffer.pop_back();
-
-        // Now the line buffer only has a relative include path.
-        // Build a path to the included file.
-        const auto pathToIncludedFile = pathToShaderSourceFile.parent_path() / sLineBuffer;
-
         // Process included file.
-        auto result = parse(pathToIncludedFile, bParseAsHlsl);
+        auto result = parse(optionalIncludedPath.value(), bParseAsHlsl, vAdditionalIncludeDirectories);
         if (std::holds_alternative<Error>(result)) [[unlikely]] {
             return std::get<Error>(result);
         }
@@ -331,4 +302,75 @@ void CombinedShaderLanguageParser::replaceSubstring(
         // Increment current position.
         iCurrentPosition += sReplaceTo.size();
     } while (iCurrentPosition < sText.size());
+}
+
+std::variant<std::optional<std::filesystem::path>, CombinedShaderLanguageParser::Error>
+CombinedShaderLanguageParser::findIncludePath(
+    std::string& sLineBuffer,
+    const std::filesystem::path& pathToShaderSourceFile,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
+    // Look for the include keyword.
+    if (sLineBuffer.find(sIncludeKeyword) == std::string::npos) {
+        return {};
+    }
+
+    // Remove the include keyword from the buffer.
+    sLineBuffer.erase(0, sIncludeKeyword.size());
+
+    // Make sure that the line is not empty now.
+    // Even if the line has some character (probably a space) it's still not enough.
+    // Check for `2` in order to not crash when we check for the first quote.
+    if (sLineBuffer.size() < 2) [[unlikely]] {
+        return Error(
+            std::format("expected to find path after #include on line \"{}\"", sLineBuffer),
+            pathToShaderSourceFile);
+    }
+
+    // The first character should be a space now.
+    if (sLineBuffer[0] != ' ') [[unlikely]] {
+        return Error(
+            std::format(
+                "expected to find 1 empty space character after the keyword on line \"{}\"", sLineBuffer),
+            pathToShaderSourceFile);
+    }
+
+    // The second character and the last one should be quotes.
+    if (sLineBuffer[1] != '\"' || !sLineBuffer.ends_with("\"")) [[unlikely]] {
+        return Error(
+            std::format(
+                "expected to find open/close quotes between the included path on line \"{}\"", sLineBuffer),
+            pathToShaderSourceFile);
+    }
+
+    // Erase a space and a quote.
+    sLineBuffer.erase(0, 2);
+
+    // Erase last quote.
+    sLineBuffer.pop_back();
+
+    // Now the line buffer only has a relative include path.
+    // Build a path to the included file.
+    auto pathToIncludedFile = pathToShaderSourceFile.parent_path() / sLineBuffer;
+    if (!std::filesystem::exists(pathToIncludedFile)) {
+        // Attempt to use additional include directories.
+        bool bFoundFilePath = false;
+        for (const auto& pathToDirectory : vAdditionalIncludeDirectories) {
+            // Construct new path.
+            pathToIncludedFile = pathToDirectory / sLineBuffer;
+
+            // Check if it exists.
+            if (std::filesystem::exists(pathToIncludedFile)) {
+                bFoundFilePath = true;
+                break;
+            }
+        }
+
+        // Make sure we found an existing path.
+        if (!bFoundFilePath) [[unlikely]] {
+            return Error(
+                std::format("unable to find included file \"{}\"", sLineBuffer), pathToShaderSourceFile);
+        }
+    }
+
+    return pathToIncludedFile;
 }

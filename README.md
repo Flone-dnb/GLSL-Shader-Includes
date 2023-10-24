@@ -53,6 +53,7 @@ Note:
 What this parser does:
 
 - Replaces `#include "relative/path"` with included file contents - might be useful in GLSL.
+- Allows to specify additional include directories before parsing.
 - Appends variables from blocks marked as `#additional_push_constants` to the initial (probably included) push constants layout definition to allow "extending" push constants from other files - might be useful in Vulkan applications.
 - Has two modes: `parseHlsl` and `parseGlsl`:
     - `parseHlsl` parses the specified file and replaces simple GLSL types (not all, such as `vec3` or `mat3`) to HLSL types (such as `float3` and `float3x3`) in the memory while reading (source file will not be changed) - allows you to have 1 shader written with GLSL types and process it in both DirectX and Vulkan/OpenGL.
