@@ -9,6 +9,12 @@
 #glsl } frameData;
 #hlsl }; ConstantBuffer<FrameData> frameData : register(b0, space5);
 
+#glsl{
+    struct Nested{
+        uint test;
+    }
+}
+
 void foo(){
     mat4 matrix = frameData.worldMatrix;
 }

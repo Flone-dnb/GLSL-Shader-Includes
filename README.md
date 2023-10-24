@@ -1,6 +1,6 @@
 # Combined Shader Language Parser
 
-Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser does:
+Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating some shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser does:
 
 ```
 // input file

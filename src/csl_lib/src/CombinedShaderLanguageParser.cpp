@@ -84,11 +84,18 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
 
     // Process body.
     bool bFinishedProcessing = false;
+    size_t iNestedScopeCount = 0;
     while (std::getline(file, sLineBuffer)) {
-        // See if we reached the end of the block.
-        if (sLineBuffer.starts_with('}')) {
-            bFinishedProcessing = true;
-            break;
+        // See if this line introduces another scope.
+        if (sLineBuffer.find('{') != std::string::npos) {
+            iNestedScopeCount += 1;
+        } else if (sLineBuffer.find('}') != std::string::npos) {
+            if (iNestedScopeCount == 0) {
+                bFinishedProcessing = true;
+                break;
+            }
+
+            iNestedScopeCount -= 1;
         }
 
         processContent(sLineBuffer);
