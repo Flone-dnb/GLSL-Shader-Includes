@@ -1,4 +1,4 @@
-# CombinedShaderLanguageParser
+# Combined Shader Language Parser
 
 Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser does:
 
@@ -77,6 +77,20 @@ add_subdirectory(<some path here>/combined-shader-language-parser SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC CombinedShaderLanguageParserLib)
 ```
 
+In your C++ code:
+
+```cpp
+#include "CombinedShaderLanguageParser.h"
+
+auto result = CombinedShaderLanguageParser::parseGlsl("path/to/myfile.glsl");
+// or                                       parseHlsl("path/to/myfile.glsl");
+if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)){
+    // handle error
+    return;
+}
+const auto sFullSourceCode = std::get<std::string>(std::move(result));
+```
+
 ## Optional features
 
 `CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
@@ -106,19 +120,6 @@ layout(push_constant) uniform Indices
     uint someIndex;
 } indices;
 
-```
-
-In your C++ code:
-
-```cpp
-#include "CombinedShaderLanguageParser.h"
-
-auto result = CombinedShaderLanguageParser::parseGlsl("path/to/myfile.glsl");
-if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)){
-    // handle error
-    return;
-}
-const auto sFullSourceCode = std::get<std::string>(std::move(result));
 ```
 
 # Building the project for development
