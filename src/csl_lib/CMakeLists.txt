@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(GlslShaderIncluderLib)
+project(CombinedShaderLanguageParserLib)
 
 # Define some relative paths.
 set(RELATIVE_EXT_PATH "../../ext")
@@ -16,7 +16,7 @@ include(${RELATIVE_CMAKE_HELPERS_PATH}/utils.cmake)
 #                                            OPTIONS
 # -------------------------------------------------------------------------------------------------
 
-option(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN "Defines whether to enable documentation generation on build or not." ON)
+option(CSL_ENABLE_DOXYGEN "Defines whether to enable documentation generation on build or not." ON)
 
 # -------------------------------------------------------------------------------------------------
 #                                          TARGET SOURCES
@@ -24,8 +24,8 @@ option(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN "Defines whether to enable documentat
 
 # Sources.
 set(PROJECT_SOURCES
-    src/ShaderIncluder.h
-    src/ShaderIncluder.cpp
+    src/CombinedShaderLanguageParser.h
+    src/CombinedShaderLanguageParser.cpp
     # add your .h/.cpp files here
 )
 
@@ -43,7 +43,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER ${PROJECT_FOLDER})
 enable_more_warnings()
 
 # Enable doxygen.
-if (GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN)
+if (CSL_ENABLE_DOXYGEN)
     enable_doxygen(${CMAKE_CURRENT_SOURCE_DIR}/../../docs)
 endif()
 

@@ -6,11 +6,12 @@
     uint someIndex2;
 }
 
-#additional_push_constants
-{
+#additional_push_constants{
     uint additionalIndex1;
     uint additionalIndex2;
 }
+
+#additional_push_constants uint additionalIndex3;
 
 void foo(){
     // some code here

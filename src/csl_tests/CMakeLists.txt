@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(GlslShaderIncluderTests)
+project(CombinedShaderLanguageParserTests)
 
 # Define some relative paths.
 set(RELATIVE_EXT_PATH "../../ext")
@@ -59,7 +59,7 @@ endif()
 # -------------------------------------------------------------------------------------------------
 
 # Add project library.
-set(PROJECT_LIB_TARGET GlslShaderIncluderLib)
+set(PROJECT_LIB_TARGET CombinedShaderLanguageParserLib)
 if (NOT TARGET ${PROJECT_LIB_TARGET}) # define target only if not defined yet
     message(STATUS "${PROJECT_NAME}: started adding ${PROJECT_LIB_TARGET}...\n----------------------------------------------\n")
     add_subdirectory(../${PROJECT_LIB_TARGET} ${DEPENDENCY_BUILD_DIR_NAME}/${PROJECT_LIB_TARGET})

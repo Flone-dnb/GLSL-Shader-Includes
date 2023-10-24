@@ -1,36 +1,85 @@
-# Fork information
+# CombinedShaderLanguageParser
 
-This fork adds the following changes:
-- Upgrade to C++20.
-- Code refactoring.
-- Better error handling.
-- Add unit tests.
-- Minor project, code style and documentation improvements.
-- Require double quotes for include paths (for example: `#include "Base.glsl"`).
-- Added optional `#additional_push_constants` keyword (see description below).
+Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser does:
 
-# GLSL Shader Includer
+```
+// input file
 
-A utility class which allows the end user to make use of the include statement in a shader file.
-This is a C++ class but any programmer that has basic knowledge of his / her programming language of choice, should be able to quickly convert the code to another language within a couple minutes. It is that simple.
+#hlsl cbuffer frameData : register(b0, space5){
+#glsl layout(binding = 0) uniform frameData{
+    mat4 viewProjectionMatrix;
+    vec3 cameraPosition;
+};
+```
 
-### Introduction
+when `parseHlsl` is used you will get the following code:
 
-The sole purpose of this class is to load a file and extract the text that is in it. In theory, this class could be used for a variety of text-processing purposes, but it was initially designed to be used to load shader source code for GLSL, as it does not have a built-in function that lets you include another source files easily.
+```
+cbuffer frameData : register(b0, space5){   // `#glsl` content was removed
+    float4x4 viewProjectionMatrix;          // `mat4` was converted to `float4x4`
+    float3 cameraPosition;                  // `vec3` was converted to `float3`
+};
+```
 
-### Using this project
+when `parseGlsl` is used you will get the following code:
+
+```
+layout(binding = 0) uniform frameData{     // `#hlsl` content was removed
+    mat4 viewProjectionMatrix;
+    vec3 cameraPosition;
+};
+```
+
+Here are all forms of a language block:
+
+```
+#keyword // code (single line)
+
+#keyword{
+    // code (block)
+}
+
+#keyword
+{
+    // code (block)
+}
+```
+
+Note:
+
+- This parser does not have a fixed file extension and it just processes the file you give to it.
+- This parser should be run to read the file from disk to then pass parsed text to your shader compiler.
+
+What this parser does:
+
+- Replaces `#include "relative/path"` with included file contents - might be useful in GLSL.
+- Appends variables from blocks marked as `#additional_push_constants` to the initial (probably included) push constants layout definition to allow "extending" push constants from other files - might be useful in Vulkan applications.
+- Has two modes: `parseHlsl` and `parseGlsl`:
+    - `parseHlsl` parses the specified file and replaces simple GLSL types (not all, such as `vec3` or `mat3`) to HLSL types (such as `float3` and `float3x3`) in the memory while reading (source file will not be changed) - allows you to have 1 shader written with GLSL types and process it in both DirectX and Vulkan/OpenGL.
+    - `parseGlsl` just parses the file as usual (no type conversion will be applied).
+- Allows to specify `#hlsl` and `#glsl` block of code in your shader source file that will be processed differently in different modes:
+    - When `parseHlsl` meets `#hlsl` block of code it removes the `#hlsl` keyword (in the memory while reading) and just reads the code that was specified in the `#hlsl` block without doing any type conversions.
+    - When `parseHlsl` meets `#glsl` block of code it removes the keyword and all code from this block (in the memory while reading).
+    - When `parseGlsl` meets `#hlsl` block of code it removes the keyword and all code from this block (in the memory while reading).
+    - When `parseGlsl` meets `#glsl` block of code it removes the `#glsl` keyword (in the memory while reading) and just reads the code that was specified in the `#glsl` block without doing any type conversions.
+
+As you can see from the list above this parser does some GLSL -> HLSL conversions but not the other way. Keep that in mind.
+
+# Using this project
 
 In your cmake file:
 
 ```cmake
-set(GLSL_SHADER_INCLUDER_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-set(GLSL_SHADER_INCLUDER_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
-set(GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE) // optional
-add_subdirectory(<some path here>/GLSL-Shader-Includes SYSTEM)
-target_link_libraries(${PROJECT_NAME} PUBLIC GlslShaderIncluderLib)
+set(CSL_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(CSL_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
+set(CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE) // optional
+add_subdirectory(<some path here>/combined-shader-language-parser SYSTEM)
+target_link_libraries(${PROJECT_NAME} PUBLIC CombinedShaderLanguageParserLib)
 ```
 
-`GLSL_SHADER_INCLUDER_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
+## Optional features
+
+`CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
 
 ```GLSL
 // ----------------- SomePushConstants.glsl -----------------
@@ -59,103 +108,17 @@ layout(push_constant) uniform Indices
 
 ```
 
-Then in your C++ code:
+In your C++ code:
 
 ```cpp
-#include "ShaderIncluder.h"
+#include "CombinedShaderLanguageParser.h"
 
-auto result = ShaderIncluder::parseFullSourceCode("path/to/shader.extension");
-if (std::holds_alternative<ShaderIncluder::Error>(result)){
+auto result = CombinedShaderLanguageParser::parseGlsl("path/to/myfile.glsl");
+if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)){
     // handle error
     return;
 }
 const auto sFullSourceCode = std::get<std::string>(std::move(result));
-```
-
-This will (recursively) extract the source code from the first shader file.
-
-Now, you might be wondering, what is the point of using your code for something so trivial as to loading a file and calling the "std::getline()" function on it?
-
-Well, besides loading the shader source code from a single file, the loader also supports custom keywords that allow you to include external files inside your shader source code! Since all of this loading is still fairly trivial but cumbersome to write over and over again, it has been uploaded to this repository for you to use.
-
-### Example
-
-*Vertex shader [./resources/shaders/basic.vs]*
-```glsl
-#version 330 core
-layout (location = 0) in vec3 position;
-
-// Include other files
-#include "include/functions.incl"
-#include "include/uniforms.incl"
-
-void main()
-{
-    position += doFancyCalculationA() * offsetA;
-    position += doFancyCalculationB() * offsetB;
-    position += doFancyCalculationC() * offsetC;
-
-    gl_Position = vec4(position, 1.0);
-}
-```
-
-*Utility functions [./resources/shaders/include/functions.incl]*
-```glsl
-vec3 doFancyCalculationA()
-{
-    return vec3(1.0, 0.0, 1.0);
-}
-
-vec3 doFancyCalculationB()
-{
-    return vec3(0.0, 1.0, 0.0);
-}
-
-vec3 doFancyCalculationC()
-{
-    return vec3(0.0, 0.0, 1.0);
-}
-```
-
-*Uniforms [./resources/shaders/include/uniforms.incl]*
-```glsl
-uniform vec3 offsetA;
-uniform vec3 offsetB;
-uniform vec3 offsetC;
-```
-
-*Result*
-```glsl
-#version 330 core
-layout (location = 0) in vec3 position;
-
-vec3 doFancyCalculationA()
-{
-    return vec3(1.0, 0.0, 1.0);
-}
-
-vec3 doFancyCalculationB()
-{
-    return vec3(0.0, 1.0, 0.0);
-}
-
-vec3 doFancyCalculationC()
-{
-    return vec3(0.0, 0.0, 1.0);
-}
-
-uniform vec3 offsetA;
-uniform vec3 offsetB;
-uniform vec3 offsetC;
-
-void main()
-{
-    position += doFancyCalculationA() * offsetA;
-    position += doFancyCalculationB() * offsetB;
-    position += doFancyCalculationC() * offsetC;
-
-    gl_Position = vec4(position, 1.0);
-}
 ```
 
 # Building the project for development

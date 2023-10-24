@@ -8,7 +8,9 @@ layout(push_constant) uniform Indices
     uint someIndex2;
     uint additionalIndex1;
     uint additionalIndex2;
+uint additionalIndex3;
 } indices;
+
 
 
 
