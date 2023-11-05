@@ -5,6 +5,7 @@
 #include <string>
 #include <variant>
 #include <functional>
+#include <optional>
 
 /** Parser. */
 class CombinedShaderLanguageParser {
