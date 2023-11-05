@@ -2,7 +2,6 @@
 
 // Standard.
 #include <fstream>
-#include <ranges>
 #include <format>
 
 std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseHlsl(
