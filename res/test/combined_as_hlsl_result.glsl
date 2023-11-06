@@ -5,5 +5,6 @@ struct FrameData{
 
 
 void foo(){
-    mat4 matrix = frameData.worldMatrix;
+    float4x4 matrix = frameData.worldMatrix;
+    float3 someVec = float3(0.0F, 0.0F, 0.0F);
 }

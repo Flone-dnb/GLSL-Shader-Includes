@@ -17,4 +17,5 @@
 
 void foo(){
     mat4 matrix = frameData.worldMatrix;
+    vec3 someVec = vec3(0.0F, 0.0F, 0.0F);
 }

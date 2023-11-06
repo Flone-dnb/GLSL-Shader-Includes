@@ -274,13 +274,13 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
 std::string CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(const std::string& sGlslCode) {
     auto sConvertedCode = sGlslCode;
 
-    replaceSubstring(sConvertedCode, "vec2 ", "float2 ");
-    replaceSubstring(sConvertedCode, "vec3 ", "float3 ");
-    replaceSubstring(sConvertedCode, "vec4 ", "float4 ");
+    replaceSubstring(sConvertedCode, "vec2", "float2");
+    replaceSubstring(sConvertedCode, "vec3", "float3");
+    replaceSubstring(sConvertedCode, "vec4", "float4");
 
-    replaceSubstring(sConvertedCode, "mat2 ", "float2x2 ");
-    replaceSubstring(sConvertedCode, "mat3 ", "float3x3 ");
-    replaceSubstring(sConvertedCode, "mat4 ", "float4x4 ");
+    replaceSubstring(sConvertedCode, "mat2", "float2x2");
+    replaceSubstring(sConvertedCode, "mat3", "float3x3");
+    replaceSubstring(sConvertedCode, "mat4", "float4x4");
 
     // Replacing `matnxm` will be wrong since GLSL and HLSL have different row/column specification.
     // TODO: think about this in the future
