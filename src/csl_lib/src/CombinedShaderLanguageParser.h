@@ -107,11 +107,11 @@ private:
     /**
      * Returns input string but with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
      *
-     * @param sGlslCode Code with GLSL types.
+     * @param sGlslLine Line of GLSL code.
      *
      * @return Input string with types replaced.
      */
-    static std::string convertGlslTypesToHlslTypes(const std::string& sGlslCode);
+    static std::string convertGlslTypesToHlslTypes(const std::string& sGlslLine);
 
     /**
      * Replaces all occurrences of the specified "replace from" text to "replace to" text.

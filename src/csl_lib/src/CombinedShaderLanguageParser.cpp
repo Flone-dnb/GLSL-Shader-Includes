@@ -271,8 +271,8 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     return sFullSourceCode;
 }
 
-std::string CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(const std::string& sGlslCode) {
-    auto sConvertedCode = sGlslCode;
+std::string CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(const std::string& sGlslLine) {
+    auto sConvertedCode = sGlslLine;
 
     replaceSubstring(sConvertedCode, "vec2", "float2");
     replaceSubstring(sConvertedCode, "vec3", "float3");
@@ -284,6 +284,11 @@ std::string CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(const std:
 
     // Replacing `matnxm` will be wrong since GLSL and HLSL have different row/column specification.
     // TODO: think about this in the future
+
+    if (sConvertedCode.starts_with(
+            "shared ")) { // avoid replacing `groupshared` to `groupgroupshared` because it matches `shared`
+        replaceSubstring(sConvertedCode, "shared ", "groupshared ");
+    }
 
     return sConvertedCode;
 }

@@ -9,6 +9,8 @@ layout(binding = 0) uniform FrameData {
         uint test;
     }
 
+shared uint iGroupSharedVariable;
+
 void foo(){
     mat4 matrix = frameData.worldMatrix;
     vec3 someVec = vec3(0.0F, 0.0F, 0.0F);

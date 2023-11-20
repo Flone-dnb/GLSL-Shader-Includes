@@ -56,7 +56,7 @@ What this parser does:
 - Allows to specify additional include directories before parsing.
 - Appends variables from blocks marked as `#additional_push_constants` to the initial (probably included) push constants layout definition to allow "extending" push constants from other files - might be useful in Vulkan applications.
 - Has two modes: `parseHlsl` and `parseGlsl`:
-    - `parseHlsl` parses the specified file and replaces simple GLSL types (not all, such as `vec3` or `mat3`) to HLSL types (such as `float3` and `float3x3`) in the memory while reading (source file will not be changed) - allows you to have 1 shader written with GLSL types and process it in both DirectX and Vulkan/OpenGL.
+    - `parseHlsl` parses the specified file and replaces simple GLSL types (see the full list of conversions performed by the parser below) to HLSL types (such as `float3` and `float3x3`) in the memory while reading (source file will not be changed) - allows you to have 1 shader written with GLSL types and process it in both DirectX and Vulkan/OpenGL.
     - `parseGlsl` just parses the file as usual (no type conversion will be applied).
 - Allows to specify `#hlsl` and `#glsl` block of code in your shader source file that will be processed differently in different modes:
     - When `parseHlsl` meets `#hlsl` block of code it removes the `#hlsl` keyword (in the memory while reading) and just reads the code that was specified in the `#hlsl` block without doing any type conversions.
@@ -65,6 +65,14 @@ What this parser does:
     - When `parseGlsl` meets `#glsl` block of code it removes the `#glsl` keyword (in the memory while reading) and just reads the code that was specified in the `#glsl` block without doing any type conversions.
 
 As you can see from the list above this parser does some GLSL -> HLSL conversions but not the other way. Keep that in mind.
+
+# Performed conversions
+
+Here is the list of all conversions from GLSL to HLSL that this parser does:
+
+- `vecN` to `floatN`
+- `matN` to `floatNxN`
+- `shared` to `groupshared` (for compute shaders)
 
 # Using this project
 
