@@ -151,3 +151,41 @@ TEST_CASE("parse using additional include directories") {
 
     REQUIRE(sResultingCode == sExpectedCode);
 }
+
+TEST_CASE("parsing a file with hardcoded binding indices after parser-assigned should fail") {
+    // Prepare path to the shader file we will test.
+    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesAfter.glsl";
+
+    // Make sure the shader file exists.
+    if (!std::filesystem::exists(pathToShaderSourceFile)) {
+        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
+        REQUIRE(false);
+    }
+
+    // Parse as HLSL (should fail).
+    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
+
+    // Parse as GLSL (should fail).
+    result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
+}
+
+TEST_CASE("parsing a file with hardcoded binding indices before parser-assigned should fail") {
+    // Prepare path to the shader file we will test.
+    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesBefore.glsl";
+
+    // Make sure the shader file exists.
+    if (!std::filesystem::exists(pathToShaderSourceFile)) {
+        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
+        REQUIRE(false);
+    }
+
+    // Parse as HLSL (should fail).
+    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
+
+    // Parse as GLSL (should fail).
+    result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
+}

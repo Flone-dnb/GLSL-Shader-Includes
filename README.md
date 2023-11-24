@@ -1,12 +1,12 @@
 # Combined Shader Language Parser
 
-Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating some shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser does:
+Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating some shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser can do:
 
 ```
 // input file
 
-#hlsl cbuffer frameData : register(b0, space5){
-#glsl layout(binding = 0) uniform frameData{
+#hlsl cbuffer frameData : register(b?, space5){   // <- `?` here tells the parser to assign a free index
+#glsl layout(binding = ?) uniform frameData{
     mat4 viewProjectionMatrix;
     vec3 cameraPosition;
 };
@@ -15,7 +15,7 @@ Since HLSL and GLSL are kind of similar, using this simple parser you can avoid 
 when `parseHlsl` is used you will get the following code:
 
 ```
-cbuffer frameData : register(b0, space5){   // `#glsl` content was removed
+cbuffer frameData : register(b0, space5){   // `#glsl` content was removed, index `0` was assigned
     float4x4 viewProjectionMatrix;          // `mat4` was converted to `float4x4`
     float3 cameraPosition;                  // `vec3` was converted to `float3`
 };
@@ -24,7 +24,7 @@ cbuffer frameData : register(b0, space5){   // `#glsl` content was removed
 when `parseGlsl` is used you will get the following code:
 
 ```
-layout(binding = 0) uniform frameData{     // `#hlsl` content was removed
+layout(binding = 0) uniform frameData{     // `#hlsl` content was removed, index `0` was assigned
     mat4 viewProjectionMatrix;
     vec3 cameraPosition;
 };
@@ -63,6 +63,7 @@ What this parser does:
     - When `parseHlsl` meets `#glsl` block of code it removes the keyword and all code from this block (in the memory while reading).
     - When `parseGlsl` meets `#hlsl` block of code it removes the keyword and all code from this block (in the memory while reading).
     - When `parseGlsl` meets `#glsl` block of code it removes the `#glsl` keyword (in the memory while reading) and just reads the code that was specified in the `#glsl` block without doing any type conversions.
+- Allows specifying `binding = ?` in GLSL code and `register(b?)` in HLSL code (`b` register is used as an example, you can use any: `b`, `u`, etc) to assign a free (unused) binding index while parsing.
 
 As you can see from the list above this parser does some GLSL -> HLSL conversions but not the other way. Keep that in mind.
 

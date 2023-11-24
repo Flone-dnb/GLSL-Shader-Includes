@@ -57,6 +57,21 @@ public:
         const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
 private:
+    /** Groups next available resource binding index to assign. */
+    struct NextBindingIndex {
+        /** Binding index for GLSL resources. */
+        unsigned int iGlslIndex = 0;
+
+        /**
+         * Binding indices for HLSL resources.
+         * Stores pairs of "register type" - ["register space" - "binding index"].
+         */
+        std::unordered_map<char, std::unordered_map<unsigned int, unsigned int>> hlslIndex;
+
+        /** `true` if non-parser assigned binding index was found. */
+        bool bFoundHardcodedIndex = false;
+    };
+
     /**
      * Looks for the specified keyword in the specified line and calls your callback to process code
      * after keyword (i.e. body).
@@ -88,13 +103,14 @@ private:
         std::string& sLineBuffer,
         std::ifstream& file,
         const std::filesystem::path& pathToShaderSourceFile,
-        const std::function<void(const std::string&)>& processContent);
+        const std::function<std::optional<Error>(std::string&)>& processContent);
 
     /**
      * Parses the specified file.
      *
      * @param pathToShaderSourceFile        Path to the file to parse.
      * @param bParseAsHlsl                  Whether to parse as HLSL or as GLSL.
+     * @param nextBindingIndex              Stores next available binding index for shader resources.
      * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise parsed source code.
@@ -102,16 +118,39 @@ private:
     static std::variant<std::string, Error> parse(
         const std::filesystem::path& pathToShaderSourceFile,
         bool bParseAsHlsl,
+        NextBindingIndex& nextBindingIndex,
         const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
     /**
-     * Returns input string but with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
+     * Modifies the input string with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
      *
      * @param sGlslLine Line of GLSL code.
-     *
-     * @return Input string with types replaced.
      */
-    static std::string convertGlslTypesToHlslTypes(const std::string& sGlslLine);
+    static void convertGlslTypesToHlslTypes(std::string& sGlslLine);
+
+    /**
+     * Modifies the input string with binding indices assigned (if there are any bindings declared in this
+     * line).
+     *
+     * @param sGlslLine        Line of GLSL code.
+     * @param nextBindingIndex Stores next available binding index for shader resources.
+     *
+     * @return Error message if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string>
+    assignGlslBindingIndexIfFound(std::string& sGlslLine, NextBindingIndex& nextBindingIndex);
+
+    /**
+     * Modifies the input string with binding indices assigned (if there are any bindings declared in this
+     * line).
+     *
+     * @param sHlslLine        Line of HLSL code.
+     * @param nextBindingIndex Stores next available binding index for shader resources.
+     *
+     * @return Error message if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string>
+    assignHlslBindingIndexIfFound(std::string& sHlslLine, NextBindingIndex& nextBindingIndex);
 
     /**
      * Replaces all occurrences of the specified "replace from" text to "replace to" text.
@@ -146,6 +185,9 @@ private:
 
     /** Keyword used to include other files. */
     static constexpr std::string_view sIncludeKeyword = "#include";
+
+    /** Keyword used to tell the parser that it needs to assign a binding index. */
+    static constexpr std::string_view sAssignBindingIndexKeyword = "?";
 
 #if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
     /**

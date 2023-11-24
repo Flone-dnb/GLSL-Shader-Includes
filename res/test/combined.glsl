@@ -3,11 +3,17 @@
     #extension GL_ARB_separate_shader_objects : enable
 }
 
-#glsl layout(binding = 0) uniform FrameData {
+#include "bindingIndexIncluded.glsl"
+
+#glsl layout(binding = ?) uniform FrameData {
 #hlsl struct FrameData{
     mat4 worldMatrix;
 #glsl } frameData;
-#hlsl }; ConstantBuffer<FrameData> frameData : register(b0, space5);
+#hlsl }; ConstantBuffer<FrameData> frameData : register(b?);
+
+#hlsl ConstantBuffer<uint> someData : register(b?, space5);
+#hlsl ConstantBuffer<uint> someData1 : register(b?, space5);
+#hlsl ConstantBuffer<uint> someData2 : register(b?, space0);
 
 #glsl{
     struct Nested{
