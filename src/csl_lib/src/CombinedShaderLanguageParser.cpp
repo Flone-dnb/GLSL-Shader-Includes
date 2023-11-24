@@ -330,7 +330,7 @@ void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGls
 std::optional<std::string> CombinedShaderLanguageParser::assignGlslBindingIndexIfFound(
     std::string& sGlslLine, NextBindingIndex& nextBindingIndex) {
     // Prepare keywords to look for.
-    const std::string sBindingKeyword = "binding = ";
+    const std::string sBindingKeyword = "binding";
 
     // Find binding keyword.
     auto iCurrentPos = sGlslLine.find(sBindingKeyword);
@@ -338,12 +338,31 @@ std::optional<std::string> CombinedShaderLanguageParser::assignGlslBindingIndexI
         return {};
     }
 
-    // Jump to binding index value.
+    // Jump to keyword end.
     iCurrentPos += sBindingKeyword.size();
 
+    // Go forward until `=` is found (skip spaces).
+    for (; iCurrentPos < sGlslLine.size(); iCurrentPos++) {
+        if (sGlslLine[iCurrentPos] == '=') {
+            break;
+        }
+    }
+
+    // Make sure we found `=`.
+    if (sGlslLine[iCurrentPos] != '=') [[unlikely]] {
+        return std::format("found `{}` keyword but no `=` after it", sBindingKeyword);
+    }
+    iCurrentPos += 1;
+
+    // Go forward until a non-space character is found.
+    for (; iCurrentPos < sGlslLine.size(); iCurrentPos++) {
+        if (sGlslLine[iCurrentPos] != ' ') {
+            break;
+        }
+    }
+
     // Make sure we will now have our binding index keyword.
-    const auto iKeywordPos = sGlslLine.find(sAssignBindingIndexKeyword, iCurrentPos);
-    if (iKeywordPos == std::string::npos) {
+    if (sGlslLine.find(sAssignBindingIndexKeyword, iCurrentPos) == std::string::npos) {
         // Found hardcoded index.
         nextBindingIndex.bFoundHardcodedIndex = true;
 
@@ -367,10 +386,10 @@ std::optional<std::string> CombinedShaderLanguageParser::assignGlslBindingIndexI
     }
 
     // Erase our keyword.
-    sGlslLine.erase(iKeywordPos, sAssignBindingIndexKeyword.size());
+    sGlslLine.erase(iCurrentPos, sAssignBindingIndexKeyword.size());
 
     // Insert a new binding index.
-    sGlslLine.insert(iKeywordPos, std::to_string(nextBindingIndex.iGlslIndex));
+    sGlslLine.insert(iCurrentPos, std::to_string(nextBindingIndex.iGlslIndex));
 
     // Increment next available binding index.
     nextBindingIndex.iGlslIndex += 1;

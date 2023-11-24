@@ -1,4 +1,4 @@
-#glsl layout(binding = ?) uniform AdditionalData1 {
+#glsl layout(binding=?) uniform AdditionalData1 {
 #glsl    uint test;
 #glsl } additionalData1;
 
