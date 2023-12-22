@@ -4,288 +4,96 @@
 // External.
 #include "catch2/catch_test_macros.hpp"
 
-TEST_CASE("parse a sample file") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/shaderA.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile = "res/test/result.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
+void testCompareParsingResults(const std::filesystem::path& pathToDirectory) {
+    // Make sure the path exists.
+    if (!std::filesystem::exists(pathToDirectory)) [[unlikely]] {
+        INFO("expected the path \"" + pathToDirectory.string() + "\" to exist");
         REQUIRE(false);
     }
 
+    // Prepare path to parse.
+    const auto pathToParse = pathToDirectory / "to_parse.glsl";
+
+    // Make sure the shader file exists.
+    if (!std::filesystem::exists(pathToParse)) [[unlikely]] {
+        INFO("expected the file \"" + pathToParse.string() + "\" to exist");
+        REQUIRE(false);
+    }
+
+    // Prepare paths to results.
+    const auto pathToResultAsHlsl = pathToDirectory / "result.hlsl";
+    const auto pathToResultAsGlsl = pathToDirectory / "result.glsl";
+    const auto bHlslResultExists = std::filesystem::exists(pathToResultAsHlsl);
+    const auto bGlslResultExists = std::filesystem::exists(pathToResultAsGlsl);
+
+    // Make sure at least one result exists.
+    if (!bHlslResultExists && !bGlslResultExists) [[unlikely]] {
+        INFO(
+            "expected at least one result file (.glsl or .hlsl) to exist in the directory \"" +
+            pathToDirectory.string() + "\"");
+        REQUIRE(false);
+    }
+
+    // Check if additional include directory is specified.
+    std::vector<std::filesystem::path> vAdditionalIncludeDirectories;
+    const auto pathToAdditionalIncludes = pathToDirectory / "additional_include";
+    if (std::filesystem::exists(pathToAdditionalIncludes)) {
+        vAdditionalIncludeDirectories.push_back(pathToAdditionalIncludes);
+    }
+
     // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
+    std::variant<std::string, CombinedShaderLanguageParser::Error> result;
+    if (bHlslResultExists) {
+        result = CombinedShaderLanguageParser::parseHlsl(pathToParse, vAdditionalIncludeDirectories);
+    } else {
+        result = CombinedShaderLanguageParser::parseGlsl(pathToParse, vAdditionalIncludeDirectories);
+    }
+    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+        const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+        INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
         REQUIRE(false);
     }
     const auto sResultingCode = std::get<std::string>(std::move(result));
 
     // Compare the resulting code with the expected code.
     // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
+    if (bHlslResultExists) {
+        result = CombinedShaderLanguageParser::parseHlsl(pathToResultAsHlsl);
+    } else {
+        result = CombinedShaderLanguageParser::parseGlsl(pathToResultAsGlsl);
+    }
+    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+        const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+        INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
         REQUIRE(false);
     }
     const auto sExpectedCode = std::get<std::string>(std::move(result));
 
+    INFO("checking directory: " + pathToDirectory.filename().string());
+
     REQUIRE(sResultingCode == sExpectedCode);
+
+    INFO("[TEST PASSED] directory: " + pathToDirectory.filename().string());
 }
 
 #if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
 TEST_CASE("parse a sample file with additional push constants") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/additionalPushConstants.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile = "res/test/pushConstantsResult.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
+    testCompareParsingResults("res/test/additional_push_constants");
 }
 #endif
 
-TEST_CASE("parse combined file as GLSL") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/combined.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile = "res/test/combined_as_glsl_result.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
-}
-
-TEST_CASE("parse combined file as HLSL") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/combined.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile = "res/test/combined_as_hlsl_result.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseHlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
-}
+TEST_CASE("parse combined file") { testCompareParsingResults("res/test/combined"); }
 
 TEST_CASE("parse using additional include directories") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/additional_include_directories.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile =
-        "res/test/additional_include_directories_result.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile, {"res/test/additional"});
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
+    testCompareParsingResults("res/test/additional_include_directories");
 }
 
-TEST_CASE("parse a GLSL file with hardcoded binding indices after parser-assigned") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesAfter.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile =
-        "res/test/mixedBindingIndicesAfterResultAsGlsl.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+TEST_CASE("parse a file with hardcoded binding indices after parser-assigned") {
+    testCompareParsingResults("res/test/hardcoded_binding_indices_after_auto");
 }
 
-TEST_CASE("parse an HLSL file with hardcoded binding indices after parser-assigned") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesAfter.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile =
-        "res/test/mixedBindingIndicesAfterResultAsHlsl.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseHlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
+TEST_CASE("parse a file with hardcoded binding indices before parser-assigned") {
+    testCompareParsingResults("res/test/hardcoded_binding_indices_before_auto");
 }
-
-TEST_CASE("parse a GLSL file with hardcoded binding indices before parser-assigned") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesBefore.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile =
-        "res/test/mixedBindingIndicesBeforeResultAsGlsl.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseGlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
-}
-
-TEST_CASE("parse an HLSL file with hardcoded binding indices before parser-assigned") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/mixedBindingIndicesBefore.glsl";
-    const std::filesystem::path pathToResultingShaderSourceFile =
-        "res/test/mixedBindingIndicesBeforeResultAsHlsl.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse the source code.
-    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
-
-    // Compare the resulting code with the expected code.
-    // (pushing the file though the parser to have constant line endings and stuff)
-    result = CombinedShaderLanguageParser::parseHlsl(pathToResultingShaderSourceFile);
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) {
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
-
-    REQUIRE(sResultingCode == sExpectedCode);
-}
-TEST_CASE("parse a file with hardcoded binding indices") {
-    // Prepare path to the shader file we will test.
-    const std::filesystem::path pathToShaderSourceFile = "res/test/hardcodedBindingIndices.glsl";
-
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToShaderSourceFile)) {
-        INFO("expected the file \"" + pathToShaderSourceFile.string() + "\" to exist");
-        REQUIRE(false);
-    }
-
-    // Parse as HLSL (should be OK).
-    auto result = CombinedShaderLanguageParser::parseHlsl(pathToShaderSourceFile);
-    REQUIRE(!std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
-
-    // Parse as GLSL (should fail).
-    result = CombinedShaderLanguageParser::parseGlsl(pathToShaderSourceFile);
-    REQUIRE(!std::holds_alternative<CombinedShaderLanguageParser::Error>(result));
-}
+#endif

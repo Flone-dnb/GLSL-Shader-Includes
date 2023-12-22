@@ -1,7 +1,4 @@
 
-
-SamplerState textureSampler : register(s0, space5);
-
 struct FrameData{
     float4x4 worldMatrix;
 }; ConstantBuffer<FrameData> frameData : register(b0);

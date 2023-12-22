@@ -875,29 +875,38 @@ CombinedShaderLanguageParser::findIncludePath(
             pathToShaderSourceFile);
     }
 
-    // The second character and the last one should be quotes.
-    if (sLineBuffer[1] != '\"' || !sLineBuffer.ends_with("\"")) [[unlikely]] {
+    // The second character should be `"`.
+    if (sLineBuffer[1] != '\"') [[unlikely]] {
         return Error(
             std::format(
-                "expected to find open/close quotes between the included path on line \"{}\"", sLineBuffer),
+                "expected to find open quote in the beginning of the included path on line \"{}\"",
+                sLineBuffer),
             pathToShaderSourceFile);
     }
 
     // Erase a space and a quote.
     sLineBuffer.erase(0, 2);
 
-    // Erase last quote.
-    sLineBuffer.pop_back();
+    // Now find closing quote.
+    const auto iClosingQuotePos = sLineBuffer.find('"');
+    if (iClosingQuotePos == std::string::npos) [[unlikely]] {
+        return Error(
+            std::format("expected to find a closing quote in the included path on line \"{}\"", sLineBuffer),
+            pathToShaderSourceFile);
+    }
+
+    // Cut included path.
+    const auto sIncludedPath = sLineBuffer.substr(0, iClosingQuotePos);
 
     // Now the line buffer only has a relative include path.
     // Build a path to the included file.
-    auto pathToIncludedFile = pathToShaderSourceFile.parent_path() / sLineBuffer;
+    auto pathToIncludedFile = pathToShaderSourceFile.parent_path() / sIncludedPath;
     if (!std::filesystem::exists(pathToIncludedFile)) {
         // Attempt to use additional include directories.
         bool bFoundFilePath = false;
         for (const auto& pathToDirectory : vAdditionalIncludeDirectories) {
             // Construct new path.
-            pathToIncludedFile = pathToDirectory / sLineBuffer;
+            pathToIncludedFile = pathToDirectory / sIncludedPath;
 
             // Check if it exists.
             if (std::filesystem::exists(pathToIncludedFile)) {
@@ -909,7 +918,7 @@ CombinedShaderLanguageParser::findIncludePath(
         // Make sure we found an existing path.
         if (!bFoundFilePath) [[unlikely]] {
             return Error(
-                std::format("unable to find included file \"{}\"", sLineBuffer), pathToShaderSourceFile);
+                std::format("unable to find included file \"{}\"", sIncludedPath), pathToShaderSourceFile);
         }
     }
 

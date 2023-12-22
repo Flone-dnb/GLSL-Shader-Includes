@@ -3,8 +3,6 @@
     #extension GL_ARB_separate_shader_objects : enable
 }
 
-#include "bindingIndexIncluded.glsl"
-
 #glsl layout(binding = ?) uniform FrameData {
 #hlsl struct FrameData{
     mat4 worldMatrix;
