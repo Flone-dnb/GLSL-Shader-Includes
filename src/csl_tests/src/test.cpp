@@ -4,7 +4,8 @@
 // External.
 #include "catch2/catch_test_macros.hpp"
 
-void testCompareParsingResults(const std::filesystem::path& pathToDirectory) {
+void testCompareParsingResults(
+    const std::filesystem::path& pathToDirectory, unsigned int iBaseAutomaticBindingIndex = 0) {
     // Make sure the path exists.
     if (!std::filesystem::exists(pathToDirectory)) [[unlikely]] {
         INFO("expected the path \"" + pathToDirectory.string() + "\" to exist");
@@ -46,7 +47,8 @@ void testCompareParsingResults(const std::filesystem::path& pathToDirectory) {
     if (bHlslResultExists) {
         result = CombinedShaderLanguageParser::parseHlsl(pathToParse, vAdditionalIncludeDirectories);
     } else {
-        result = CombinedShaderLanguageParser::parseGlsl(pathToParse, vAdditionalIncludeDirectories);
+        result = CombinedShaderLanguageParser::parseGlsl(
+            pathToParse, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
     }
     if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
         const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
@@ -95,5 +97,9 @@ TEST_CASE("parse a file with hardcoded binding indices after parser-assigned") {
 
 TEST_CASE("parse a file with hardcoded binding indices before parser-assigned") {
     testCompareParsingResults("res/test/hardcoded_binding_indices_before_auto");
+}
+
+TEST_CASE("parse a file with mixed indices and non-zero auto binding index") {
+    testCompareParsingResults("res/test/non_zero_base_auto_binding_index", 100);
 }
 #endif

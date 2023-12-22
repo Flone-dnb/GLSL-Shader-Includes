@@ -5,16 +5,17 @@
 #include <format>
 #include <array>
 
-std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseHlsl(
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::runParsing(
     const std::filesystem::path& pathToShaderSourceFile,
-    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
+    bool bParseAsHlsl,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories,
+    unsigned int iBaseAutomaticBindingIndex) {
     // Prepare some variables.
     BindingIndicesInfo bindingIndicesInfo{};
     std::vector<std::string> vFoundAdditionalPushConstants;
-    const auto bParseAsHlsl = true;
 
     // Parse.
-    auto result = parse(
+    auto result = parseFile(
         pathToShaderSourceFile,
         bParseAsHlsl,
         bindingIndicesInfo,
@@ -31,7 +32,8 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         bParseAsHlsl,
         bindingIndicesInfo,
         sFullParsedSourceCode,
-        vFoundAdditionalPushConstants);
+        vFoundAdditionalPushConstants,
+        iBaseAutomaticBindingIndex);
     if (optionalError.has_value()) [[unlikely]] {
         return optionalError.value();
     }
@@ -39,38 +41,18 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     return sFullParsedSourceCode;
 }
 
-std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseGlsl(
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseHlsl(
     const std::filesystem::path& pathToShaderSourceFile,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
-    // Prepare some variables.
-    BindingIndicesInfo bindingIndicesInfo{};
-    std::vector<std::string> vFoundAdditionalPushConstants;
-    const auto bParseAsHlsl = false;
+    return runParsing(pathToShaderSourceFile, true, vAdditionalIncludeDirectories);
+}
 
-    // Parse.
-    auto result = parse(
-        pathToShaderSourceFile,
-        bParseAsHlsl,
-        bindingIndicesInfo,
-        vFoundAdditionalPushConstants,
-        vAdditionalIncludeDirectories);
-    if (std::holds_alternative<Error>(result)) [[unlikely]] {
-        return std::get<Error>(std::move(result));
-    }
-    auto sFullParsedSourceCode = std::get<std::string>(std::move(result));
-
-    // Finalize.
-    auto optionalError = finalizeParsingResults(
-        pathToShaderSourceFile,
-        bParseAsHlsl,
-        bindingIndicesInfo,
-        sFullParsedSourceCode,
-        vFoundAdditionalPushConstants);
-    if (optionalError.has_value()) [[unlikely]] {
-        return optionalError.value();
-    }
-
-    return sFullParsedSourceCode;
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseGlsl(
+    const std::filesystem::path& pathToShaderSourceFile,
+    unsigned int iBaseAutomaticBindingIndex,
+    const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
+    return runParsing(
+        pathToShaderSourceFile, false, vAdditionalIncludeDirectories, iBaseAutomaticBindingIndex);
 }
 
 std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::processKeywordCode(
@@ -170,7 +152,7 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
     return {};
 }
 
-std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parse(
+std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseFile(
     const std::filesystem::path& pathToShaderSourceFile,
     bool bParseAsHlsl,
     BindingIndicesInfo& bindingIndicesInfo,
@@ -321,7 +303,7 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         }
 
         // Parse included file.
-        auto result = parse(
+        auto result = parseFile(
             optionalIncludedPath.value(),
             bParseAsHlsl,
             bindingIndicesInfo,
@@ -360,7 +342,8 @@ void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGls
 std::optional<std::string> CombinedShaderLanguageParser::assignBindingIndices( // NOLINT: slightly complex
     bool bParseAsHlsl,
     std::string& sFullSourceCode,
-    BindingIndicesInfo& bindingIndicesInfo) {
+    BindingIndicesInfo& bindingIndicesInfo,
+    unsigned int iBaseAutomaticBindingIndex) {
     if (bParseAsHlsl) {
         // Prepare some variables.
         size_t iCurrentPos = 0;
@@ -484,7 +467,7 @@ std::optional<std::string> CombinedShaderLanguageParser::assignBindingIndices( /
 
     // Parse as GLSL.
     size_t iCurrentPos = 0;
-    unsigned int iNextFreeBindingIndex = 0;
+    unsigned int iNextFreeBindingIndex = iBaseAutomaticBindingIndex;
 
     do {
         size_t iBindingIndexPositionToReplace = 0;
@@ -930,7 +913,8 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
     bool bParseAsHlsl,
     BindingIndicesInfo& bindingIndicesInfo,
     std::string& sFullParsedSourceCode,
-    std::vector<std::string>& vAdditionalPushConstants) {
+    std::vector<std::string>& vAdditionalPushConstants,
+    unsigned int iBaseAutomaticBindingIndex) {
 #if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
     // Now insert additional push constants.
     if (!vAdditionalPushConstants.empty()) {
@@ -968,7 +952,8 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
 #if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
     if (bindingIndicesInfo.bFoundBindingIndicesToAssign) {
         // Assign binding indices.
-        auto optionalError = assignBindingIndices(bParseAsHlsl, sFullParsedSourceCode, bindingIndicesInfo);
+        auto optionalError = assignBindingIndices(
+            bParseAsHlsl, sFullParsedSourceCode, bindingIndicesInfo, iBaseAutomaticBindingIndex);
         if (optionalError.has_value()) [[unlikely]] {
             return Error(optionalError.value(), pathToShaderSourceFile);
         }

@@ -50,12 +50,19 @@ public:
      * Parses the specified file as GLSL code (`#hlsl` blocks are ignored and not included).
      *
      * @param pathToShaderSourceFile        Path to the file to process.
+     * @param iBaseAutomaticBindingIndex    If you use `?` character to ask the parser to specify automatic
+     * free (unused) binding indices, this value will be used as the smallest (starting) auto-generated
+     * binding index counter so that all parser-generated binding indices will be equal or bigger than this
+     * value. Using this index you can (for example) compile your vertex shaders with 0 base index and
+     * fragment shaders with 100 index to guarantee that indices of shaders will be unique to combine
+     * them later together in your renderer.
      * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise full (combined) source code.
      */
     static std::variant<std::string, Error> parseGlsl(
         const std::filesystem::path& pathToShaderSourceFile,
+        unsigned int iBaseAutomaticBindingIndex = 0,
         const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
 
 private:
@@ -109,17 +116,36 @@ private:
         const std::function<std::optional<Error>(std::string&)>& processContent);
 
     /**
+     * Starts parsing using the specified path.
+     *
+     * @param pathToShaderSourceFile        Path to the file to process.
+     * @param bParseAsHlsl                  Whether to parse as HLSL or as GLSL.
+     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
+     * @param iBaseAutomaticBindingIndex    Used only if parsing as GLSL. If you use `?` character to ask the
+     * parser to specify automatic free (unused) binding indices, this value will be used as the smallest
+     * (starting) auto-generated binding index counter so that all parser-generated binding indices will be
+     * equal or bigger than this value.
+     *
+     * @return Error if something went wrong, otherwise full (combined) source code.
+     */
+    static std::variant<std::string, Error> runParsing(
+        const std::filesystem::path& pathToShaderSourceFile,
+        bool bParseAsHlsl,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories,
+        unsigned int iBaseAutomaticBindingIndex = 0);
+
+    /**
      * Parses the specified file.
      *
-     * @param pathToShaderSourceFile        Path to the file to parse.
-     * @param bParseAsHlsl                  Whether to parse as HLSL or as GLSL.
+     * @param pathToShaderSourceFile        Path to the file to parseFile.
+     * @param bParseAsHlsl                  Whether to parseFile as HLSL or as GLSL.
      * @param bindingIndicesInfo            Information about binding indices.
      * @param vFoundAdditionalPushConstants Additional push constants that were found during parsing.
      * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise parsed source code.
      */
-    static std::variant<std::string, Error> parse(
+    static std::variant<std::string, Error> parseFile(
         const std::filesystem::path& pathToShaderSourceFile,
         bool bParseAsHlsl,
         BindingIndicesInfo& bindingIndicesInfo,
@@ -134,6 +160,10 @@ private:
      * @param bindingIndicesInfo       Information about binding indices.
      * @param sFullParsedSourceCode    Parsed source code.
      * @param vAdditionalPushConstants Additional push constants that were found during parsing.
+     * @param iBaseAutomaticBindingIndex Used only if parsing as GLSL. If you use `?` character to ask the
+     * parser to specify automatic free (unused) binding indices, this value will be used as the smallest
+     * (starting) auto-generated binding index counter so that all parser-generated binding indices will be
+     * equal or bigger than this value.
      *
      * @return Error if something went wrong.
      */
@@ -142,7 +172,8 @@ private:
         bool bParseAsHlsl,
         BindingIndicesInfo& bindingIndicesInfo,
         std::string& sFullParsedSourceCode,
-        std::vector<std::string>& vAdditionalPushConstants);
+        std::vector<std::string>& vAdditionalPushConstants,
+        unsigned int iBaseAutomaticBindingIndex = 0);
 
     /**
      * Modifies the input string with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
@@ -158,11 +189,18 @@ private:
      * @param bParseAsHlsl       `true` to treat the specified code line as HLSL, `false` as GLSL.
      * @param sFullSourceCode    Full source code (may contain multiple lines) to scan for keywords.
      * @param bindingIndicesInfo Information about used (hardcoded) binding indices.
+     * @param iBaseAutomaticBindingIndex Used only if parsing as GLSL. If you use `?` character to ask the
+     * parser to specify automatic free (unused) binding indices, this value will be used as the smallest
+     * (starting) auto-generated binding index counter so that all parser-generated binding indices will be
+     * equal or bigger than this value.
      *
      * @return Error if something went wrong.
      */
     [[nodiscard]] static std::optional<std::string> assignBindingIndices(
-        bool bParseAsHlsl, std::string& sFullSourceCode, BindingIndicesInfo& bindingIndicesInfo);
+        bool bParseAsHlsl,
+        std::string& sFullSourceCode,
+        BindingIndicesInfo& bindingIndicesInfo,
+        unsigned int iBaseAutomaticBindingIndex = 0);
 #endif
 
 #if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
