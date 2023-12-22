@@ -1,6 +1,6 @@
 # Combined Shader Language Parser
 
-Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating some shader code if you need to write both HLSL and GLSL shaders, here is a small example of what this parser can do:
+Since HLSL and GLSL are kind of similar, using this simple parser you can avoid duplicating some shader code if you need to write both HLSL and GLSL shaders, plus this parser also has some additional features that you might find helpful, here is a small example of what this parser can do:
 
 ```
 // input file
@@ -169,10 +169,11 @@ layout(binding = 1) uniform sampler2D normalTexture[];
 
 # Building the project for development
 
-Please note the instructions below are only needed if you want to modify this project, if you just want to use this project in your own project you just need to `add_subdirectory` and `target_link_libraries` in your project.
+Please note the instructions below are only needed if you want to modify this project.
 
 Prerequisites:
 
+- Compiler that supports C++20.
 - [CMake](https://cmake.org/download/)
 - [Doxygen](https://doxygen.nl/download.html)
 - [LLVM](https://github.com/llvm/llvm-project/releases/latest)
