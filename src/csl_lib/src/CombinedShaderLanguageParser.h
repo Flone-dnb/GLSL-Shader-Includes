@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <string>
 #include <variant>
+#include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <optional>
 
@@ -20,7 +22,7 @@ public:
          * @param sErrorMessage   Full error message.
          * @param pathToErrorFile Path to the file that caused the error.
          */
-        Error(const std::string& sErrorMessage, const std::filesystem::path& pathToErrorFile) {
+        explicit Error(const std::string& sErrorMessage, const std::filesystem::path& pathToErrorFile) {
             this->sErrorMessage = sErrorMessage;
             this->pathToErrorFile = pathToErrorFile;
         }
@@ -58,18 +60,19 @@ public:
 
 private:
     /** Groups next available resource binding index to assign. */
-    struct NextBindingIndex {
-        /** Binding index for GLSL resources. */
-        unsigned int iGlslIndex = 0;
+    struct BindingIndicesInfo {
+        /** Used (hardcoded) binding indices that were found while parsing existing GLSL code. */
+        std::unordered_set<unsigned int> usedGlslIndices;
 
         /**
-         * Binding indices for HLSL resources.
-         * Stores pairs of "register type" - ["register space" - "binding index"].
+         * Used (hardcoded) binding indices that were found while parsing existing HLSL code.
+         * Stores pairs of "register type" - ["register space" - "used binding indices"].
          */
-        std::unordered_map<char, std::unordered_map<unsigned int, unsigned int>> hlslIndex;
+        std::unordered_map<char, std::unordered_map<unsigned int, std::unordered_set<unsigned int>>>
+            usedHlslIndices;
 
-        /** `true` if non-parser assigned binding index was found. */
-        bool bFoundHardcodedIndex = false;
+        /** `true` if a special keyword to insert a random free binding index was found, `false` otherwise. */
+        bool bFoundBindingIndicesToAssign = false;
     };
 
     /**
@@ -110,7 +113,8 @@ private:
      *
      * @param pathToShaderSourceFile        Path to the file to parse.
      * @param bParseAsHlsl                  Whether to parse as HLSL or as GLSL.
-     * @param nextBindingIndex              Stores next available binding index for shader resources.
+     * @param bindingIndicesInfo            Information about binding indices.
+     * @param vFoundAdditionalPushConstants Additional push constants that were found during parsing.
      * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise parsed source code.
@@ -118,8 +122,27 @@ private:
     static std::variant<std::string, Error> parse(
         const std::filesystem::path& pathToShaderSourceFile,
         bool bParseAsHlsl,
-        NextBindingIndex& nextBindingIndex,
-        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories = {});
+        BindingIndicesInfo& bindingIndicesInfo,
+        std::vector<std::string>& vFoundAdditionalPushConstants,
+        const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories);
+
+    /**
+     * Called after a file and all of its includes were parsed to do final parsing logic.
+     *
+     * @param pathToShaderSourceFile   Path to the file to parse.
+     * @param bParseAsHlsl             Whether to parse as HLSL or as GLSL.
+     * @param bindingIndicesInfo       Information about binding indices.
+     * @param sFullParsedSourceCode    Parsed source code.
+     * @param vAdditionalPushConstants Additional push constants that were found during parsing.
+     *
+     * @return Error if something went wrong.
+     */
+    [[nodiscard]] static std::optional<Error> finalizeParsingResults(
+        const std::filesystem::path& pathToShaderSourceFile,
+        bool bParseAsHlsl,
+        BindingIndicesInfo& bindingIndicesInfo,
+        std::string& sFullParsedSourceCode,
+        std::vector<std::string>& vAdditionalPushConstants);
 
     /**
      * Modifies the input string with GLSL types replaced to HLSL types (for example `vec3` to `float3`).
@@ -128,29 +151,80 @@ private:
      */
     static void convertGlslTypesToHlslTypes(std::string& sGlslLine);
 
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
     /**
-     * Modifies the input string with binding indices assigned (if there are any bindings declared in this
-     * line).
+     * Replaces all occurrences of @ref sAssignBindingIndexKeyword with an unused binding index.
      *
-     * @param sGlslLine        Line of GLSL code.
-     * @param nextBindingIndex Stores next available binding index for shader resources.
+     * @param bParseAsHlsl       `true` to treat the specified code line as HLSL, `false` as GLSL.
+     * @param sFullSourceCode    Full source code (may contain multiple lines) to scan for keywords.
+     * @param bindingIndicesInfo Information about used (hardcoded) binding indices.
      *
-     * @return Error message if something went wrong.
+     * @return Error if something went wrong.
      */
-    [[nodiscard]] static std::optional<std::string>
-    assignGlslBindingIndexIfFound(std::string& sGlslLine, NextBindingIndex& nextBindingIndex);
+    [[nodiscard]] static std::optional<std::string> assignBindingIndices(
+        bool bParseAsHlsl, std::string& sFullSourceCode, BindingIndicesInfo& bindingIndicesInfo);
+#endif
 
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
     /**
-     * Modifies the input string with binding indices assigned (if there are any bindings declared in this
-     * line).
+     * Looks if there is a hardcoded binding index and adds it to the specified binding indices info.
      *
-     * @param sHlslLine        Line of HLSL code.
-     * @param nextBindingIndex Stores next available binding index for shader resources.
+     * @param bParseAsHlsl       `true` to treat the specified code line as HLSL, `false` as GLSL.
+     * @param sCodeLine          Line of code.
+     * @param bindingIndicesInfo Information about binding indices.
      *
      * @return Error message if something went wrong.
      */
-    [[nodiscard]] static std::optional<std::string>
-    assignHlslBindingIndexIfFound(std::string& sHlslLine, NextBindingIndex& nextBindingIndex);
+    [[nodiscard]] static std::optional<std::string> addHardcodedBindingIndexIfFound(
+        bool bParseAsHlsl, std::string& sCodeLine, BindingIndicesInfo& bindingIndicesInfo);
+#endif
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+    /**
+     * Increments the specified position counter in the specified source code string
+     * until reached HLSL register type, index and optionally space index.
+     *
+     * @warning Do not erase source code parts or replace them with text that has less characters in
+     * callbacks.
+     *
+     * @warning Do not modify current position in callbacks, if you need to quit the function and stop
+     * set `npos` to position.
+     *
+     * @param sSourceCode                 Source code to process (may contain multiple lines of code).
+     * @param iCurrentPos                 Position to start searching from. Will be incremented or changed to
+     * `npos` if found nothing.
+     * @param onReachedRegisterType       Called after current position reached register type (`b`, `s`, `t`,
+     * etc.).
+     * @param onReachedRegisterIndex      Called after current position reached register index.
+     * @param onReachedRegisterSpaceIndex Called after current position reached register space index (digit).
+     *
+     * @return Error if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string> findHlslRegisterInfo(
+        std::string& sSourceCode,
+        size_t& iCurrentPos,
+        const std::function<std::optional<std::string>()>& onReachedRegisterType,
+        const std::function<std::optional<std::string>()>& onReachedRegisterIndex,
+        const std::function<std::optional<std::string>()>& onReachedRegisterSpaceIndex);
+#endif
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+    /**
+     * Increments the specified position counter in the specified source code string
+     * until reached GLSL binding index.
+     *
+     * @param sSourceCode           Source code to process (may contain multiple lines of code).
+     * @param iCurrentPos           Position to start searching from. Will be incremented or changed to
+     * `npos` if found nothing.
+     * @param onReachedBindingIndex Called after current position reached binding index value.
+     *
+     * @return Error if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string> findGlslBindingIndex(
+        std::string& sSourceCode,
+        size_t& iCurrentPos,
+        const std::function<std::optional<std::string>()>& onReachedBindingIndex);
+#endif
 
     /**
      * Replaces all occurrences of the specified "replace from" text to "replace to" text.
@@ -161,6 +235,17 @@ private:
      */
     static void
     replaceSubstring(std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo);
+
+    /**
+     * Reads digits from the specified position of the specified string until non-digit character is found.
+     *
+     * @param sText              Text to read digits from.
+     * @param iReadStartPosition Position in the text to start reading digits.
+     *
+     * @return Error message if something went wrong, otherwise read number.
+     */
+    static std::variant<unsigned int, std::string>
+    readNumberFromString(const std::string& sText, size_t iReadStartPosition);
 
     /**
      * Looks for `#include` keyword and if found returns the path it contains.
@@ -186,8 +271,17 @@ private:
     /** Keyword used to include other files. */
     static constexpr std::string_view sIncludeKeyword = "#include";
 
-    /** Keyword used to tell the parser that it needs to assign a binding index. */
-    static constexpr std::string_view sAssignBindingIndexKeyword = "?";
+    /** Keyword character used to tell the parser that it needs to assign a binding index. */
+    static constexpr char assignBindingIndexCharacter = '?';
+
+    /** GLSL keyword used to specify shader resource binding index. */
+    static constexpr std::string_view sGlslBindingKeyword = "binding";
+
+    /** HLSL keyword used to specify shader resource binding index. */
+    static constexpr std::string_view sHlslBindingKeyword = "register(";
+
+    /** HLSL keyword used to specify shader resource binding space. */
+    static constexpr std::string_view sHlslRegisterSpaceKeyword = "space";
 
 #if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
     /**

@@ -3,19 +3,74 @@
 // Standard.
 #include <fstream>
 #include <format>
+#include <array>
 
 std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseHlsl(
     const std::filesystem::path& pathToShaderSourceFile,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
-    NextBindingIndex nextBindingIndex{};
-    return parse(pathToShaderSourceFile, true, nextBindingIndex, vAdditionalIncludeDirectories);
+    // Prepare some variables.
+    BindingIndicesInfo bindingIndicesInfo{};
+    std::vector<std::string> vFoundAdditionalPushConstants;
+    const auto bParseAsHlsl = true;
+
+    // Parse.
+    auto result = parse(
+        pathToShaderSourceFile,
+        bParseAsHlsl,
+        bindingIndicesInfo,
+        vFoundAdditionalPushConstants,
+        vAdditionalIncludeDirectories);
+    if (std::holds_alternative<Error>(result)) [[unlikely]] {
+        return std::get<Error>(std::move(result));
+    }
+    auto sFullParsedSourceCode = std::get<std::string>(std::move(result));
+
+    // Finalize.
+    auto optionalError = finalizeParsingResults(
+        pathToShaderSourceFile,
+        bParseAsHlsl,
+        bindingIndicesInfo,
+        sFullParsedSourceCode,
+        vFoundAdditionalPushConstants);
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError.value();
+    }
+
+    return sFullParsedSourceCode;
 }
 
 std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseGlsl(
     const std::filesystem::path& pathToShaderSourceFile,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
-    NextBindingIndex nextBindingIndex{};
-    return parse(pathToShaderSourceFile, false, nextBindingIndex, vAdditionalIncludeDirectories);
+    // Prepare some variables.
+    BindingIndicesInfo bindingIndicesInfo{};
+    std::vector<std::string> vFoundAdditionalPushConstants;
+    const auto bParseAsHlsl = false;
+
+    // Parse.
+    auto result = parse(
+        pathToShaderSourceFile,
+        bParseAsHlsl,
+        bindingIndicesInfo,
+        vFoundAdditionalPushConstants,
+        vAdditionalIncludeDirectories);
+    if (std::holds_alternative<Error>(result)) [[unlikely]] {
+        return std::get<Error>(std::move(result));
+    }
+    auto sFullParsedSourceCode = std::get<std::string>(std::move(result));
+
+    // Finalize.
+    auto optionalError = finalizeParsingResults(
+        pathToShaderSourceFile,
+        bParseAsHlsl,
+        bindingIndicesInfo,
+        sFullParsedSourceCode,
+        vFoundAdditionalPushConstants);
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError.value();
+    }
+
+    return sFullParsedSourceCode;
 }
 
 std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::processKeywordCode(
@@ -118,7 +173,8 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
 std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parse(
     const std::filesystem::path& pathToShaderSourceFile,
     bool bParseAsHlsl,
-    NextBindingIndex& nextBindingIndex,
+    BindingIndicesInfo& bindingIndicesInfo,
+    std::vector<std::string>& vFoundAdditionalPushConstants,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
     // Make sure the specified path exists.
     if (!std::filesystem::exists(pathToShaderSourceFile)) [[unlikely]] {
@@ -134,11 +190,6 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     if (!pathToShaderSourceFile.has_parent_path()) [[unlikely]] {
         return Error("no parent path", pathToShaderSourceFile);
     }
-
-    // Define some variables.
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
-    std::vector<std::string> vAdditionalPushConstants;
-#endif
 
     // Open the file.
     std::ifstream file(pathToShaderSourceFile);
@@ -161,7 +212,7 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
                 if (bParseAsHlsl) {
                     convertGlslTypesToHlslTypes(sText);
                 }
-                vAdditionalPushConstants.push_back(sText);
+                vFoundAdditionalPushConstants.push_back(sText);
                 bFoundAdditionalPushConstants = true;
                 return {};
             });
@@ -187,11 +238,14 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
                     return {};
                 }
 
-                // Process this block's content.
-                const auto optionalError = assignGlslBindingIndexIfFound(sText, nextBindingIndex);
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+                // Find hardcoded binding indices.
+                auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
                 if (optionalError.has_value()) [[unlikely]] {
                     return Error(optionalError.value(), pathToShaderSourceFile);
                 }
+#endif
+
                 sFullSourceCode += sText + "\n";
                 bFoundLanguageKeyword = true;
 
@@ -218,11 +272,14 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
                     return {};
                 }
 
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
                 // Process this block's content.
-                const auto optionalError = assignHlslBindingIndexIfFound(sText, nextBindingIndex);
+                auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
                 if (optionalError.has_value()) [[unlikely]] {
                     return Error(optionalError.value(), pathToShaderSourceFile);
                 }
+#endif
+
                 sFullSourceCode += sText + "\n";
                 bFoundLanguageKeyword = true;
 
@@ -244,26 +301,32 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         auto optionalIncludedPath = std::get<std::optional<std::filesystem::path>>(std::move(includeResult));
 
         if (!optionalIncludedPath.has_value()) {
-            // Append the line to the final source code string.
-            if (bParseAsHlsl) {
-                const auto optionalError = assignHlslBindingIndexIfFound(sLineBuffer, nextBindingIndex);
-                if (optionalError.has_value()) [[unlikely]] {
-                    return Error(optionalError.value(), pathToShaderSourceFile);
-                }
-                convertGlslTypesToHlslTypes(sLineBuffer);
-            } else {
-                const auto optionalError = assignGlslBindingIndexIfFound(sLineBuffer, nextBindingIndex);
-                if (optionalError.has_value()) [[unlikely]] {
-                    return Error(optionalError.value(), pathToShaderSourceFile);
-                }
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+            // Detect hardcoded binding indices.
+            auto optionalError =
+                addHardcodedBindingIndexIfFound(bParseAsHlsl, sLineBuffer, bindingIndicesInfo);
+            if (optionalError.has_value()) [[unlikely]] {
+                return Error(optionalError.value(), pathToShaderSourceFile);
             }
+#endif
+
+            // Convert GLSL types to HLSL.
+            if (bParseAsHlsl) {
+                convertGlslTypesToHlslTypes(sLineBuffer);
+            }
+
+            // Append the line to the final source code string.
             sFullSourceCode += sLineBuffer + "\n";
             continue;
         }
 
-        // Process included file.
+        // Parse included file.
         auto result = parse(
-            optionalIncludedPath.value(), bParseAsHlsl, nextBindingIndex, vAdditionalIncludeDirectories);
+            optionalIncludedPath.value(),
+            bParseAsHlsl,
+            bindingIndicesInfo,
+            vFoundAdditionalPushConstants,
+            vAdditionalIncludeDirectories);
         if (std::holds_alternative<Error>(result)) [[unlikely]] {
             return std::get<Error>(result);
         }
@@ -271,40 +334,6 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     }
 
     file.close();
-
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
-    // Now insert additional push constants.
-    if (!vAdditionalPushConstants.empty()) {
-        // Find where push constants start.
-        const auto iPushConstantsStartPos = sFullSourceCode.find("layout(push_constant)");
-        if (iPushConstantsStartPos == std::string::npos) [[unlikely]] {
-            return Error(
-                "additional push constants were found and includes of the file were processed "
-                "but initial push constants layout was not found in the included files",
-                pathToShaderSourceFile);
-        }
-
-        // Look for '}' after push constants.
-        const auto iPushConstantsEndPos = sFullSourceCode.find('}', iPushConstantsStartPos);
-        if (iPushConstantsEndPos == std::string::npos) [[unlikely]] {
-            return Error(
-                "expected to find a closing bracket after push constants definition", pathToShaderSourceFile);
-        }
-
-        const size_t iAdditionalPushConstantsInsertPos = iPushConstantsEndPos;
-
-        // Insert additional push constants (insert in reserve order because of how `std::string::insert`
-        // below works, to make the resulting order is correct).
-        for (auto reverseIt = vAdditionalPushConstants.rbegin(); reverseIt != vAdditionalPushConstants.rend();
-             ++reverseIt) {
-            auto& sPushConstant = *reverseIt;
-            if (!sPushConstant.ends_with('\n')) {
-                sPushConstant += '\n';
-            }
-            sFullSourceCode.insert(iAdditionalPushConstantsInsertPos, sPushConstant);
-        }
-    }
-#endif
 
     return sFullSourceCode;
 }
@@ -327,183 +356,444 @@ void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGls
     }
 }
 
-std::optional<std::string> CombinedShaderLanguageParser::assignGlslBindingIndexIfFound(
-    std::string& sGlslLine, NextBindingIndex& nextBindingIndex) {
-    // Prepare keywords to look for.
-    const std::string sBindingKeyword = "binding";
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+std::optional<std::string> CombinedShaderLanguageParser::assignBindingIndices( // NOLINT: slightly complex
+    bool bParseAsHlsl,
+    std::string& sFullSourceCode,
+    BindingIndicesInfo& bindingIndicesInfo) {
+    if (bParseAsHlsl) {
+        // Prepare some variables.
+        size_t iCurrentPos = 0;
+        std::unordered_map<char, std::unordered_map<unsigned int, unsigned int>> nextFreeBindingIndex;
 
-    // Find binding keyword.
-    auto iCurrentPos = sGlslLine.find(sBindingKeyword);
-    if (iCurrentPos == std::string::npos) {
+        // Initialize base binding indices.
+        const std::array<char, 4> vRegisterTypes = {'t', 's', 'u', 'b'};
+        for (const auto& registerType : vRegisterTypes) {
+            auto& registerSpaceIndexIt = nextFreeBindingIndex[registerType];
+            for (unsigned int i = 0; i < 9; i++) { // NOLINT: iterate over all spaces
+                registerSpaceIndexIt[i] = 0;
+            }
+        }
+
+        do {
+            // Prepare some variables.
+            bool bSkipCurrentRegister = false;
+            char registerType = '0';
+            unsigned int iRegisterSpace = 0; // default space if not specified
+            size_t iRegisterIndexPositionToReplace = 0;
+
+            // Find register values.
+            auto optionalError = findHlslRegisterInfo(
+                sFullSourceCode,
+                iCurrentPos,
+                [&]() -> std::optional<std::string> {
+                    // Reached register type.
+                    registerType = sFullSourceCode[iCurrentPos];
+
+                    return {};
+                },
+                [&]() -> std::optional<std::string> {
+                    // Reached register index.
+
+                    // Make sure it's our keyword.
+                    if (sFullSourceCode[iCurrentPos] != assignBindingIndexCharacter) {
+                        // Found hardcoded index.
+                        bSkipCurrentRegister = true;
+                        return {};
+                    }
+
+                    // Save this position.
+                    iRegisterIndexPositionToReplace = iCurrentPos;
+
+                    return {};
+                },
+                [&]() -> std::optional<std::string> {
+                    if (bSkipCurrentRegister) {
+                        return {};
+                    }
+
+                    if (sFullSourceCode[iCurrentPos] == assignBindingIndexCharacter) [[unlikely]] {
+                        return "`space?` is not supported";
+                    }
+
+                    // Reached register space.
+                    auto readResult = readNumberFromString(sFullSourceCode, iCurrentPos);
+                    if (std::holds_alternative<std::string>(readResult)) [[unlikely]] {
+                        return std::get<std::string>(std::move(readResult));
+                    }
+                    iRegisterSpace = std::get<unsigned int>(readResult);
+
+                    return {};
+                });
+            if (optionalError.has_value()) [[unlikely]] {
+                return optionalError;
+            }
+
+            if (iCurrentPos == std::string::npos) {
+                // Found nothing.
+                return {};
+            }
+
+            if (bSkipCurrentRegister) {
+                continue;
+            }
+
+            // Get space/index from free indices.
+            const auto registerSpaceIndexIt = nextFreeBindingIndex.find(registerType);
+            if (registerSpaceIndexIt == nextFreeBindingIndex.end()) [[unlikely]] {
+                return std::format("found unexpected register type `{}`", registerType);
+            }
+
+            // Get free index.
+            auto registerIndexIt = registerSpaceIndexIt->second.find(iRegisterSpace);
+            if (registerIndexIt == registerSpaceIndexIt->second.end()) [[unlikely]] {
+                return std::format("found unexpected register space {}", iRegisterSpace);
+            }
+            auto& iNextFreeRegisterIndex = registerIndexIt->second;
+
+            // Make sure this index was not used before.
+            const auto& usedIndices = bindingIndicesInfo.usedHlslIndices[registerType][iRegisterSpace];
+
+            // Update our index to assign to unused (free) index.
+            bool bFoundUnusedIndex = true;
+            do {
+                bFoundUnusedIndex = true;
+
+                for (const auto iUsedIndex : usedIndices) {
+                    if (iUsedIndex == iNextFreeRegisterIndex) {
+                        iNextFreeRegisterIndex += 1;
+                        bFoundUnusedIndex = false;
+                        break;
+                    }
+                }
+            } while (!bFoundUnusedIndex);
+
+            // Replace our special character with this index.
+            sFullSourceCode.erase(iRegisterIndexPositionToReplace, 1);
+            sFullSourceCode.insert(iRegisterIndexPositionToReplace, std::to_string(iNextFreeRegisterIndex));
+
+            // Update current position (because we might have changed string length).
+            iCurrentPos = iRegisterIndexPositionToReplace;
+
+            // Increment next free binding index (because the current one was assigned just now).
+            iNextFreeRegisterIndex += 1;
+        } while (iCurrentPos < sFullSourceCode.size());
+
         return {};
     }
 
-    // Jump to keyword end.
-    iCurrentPos += sBindingKeyword.size();
+    // Parse as GLSL.
+    size_t iCurrentPos = 0;
+    unsigned int iNextFreeBindingIndex = 0;
 
-    // Go forward until `=` is found (skip spaces).
-    for (; iCurrentPos < sGlslLine.size(); iCurrentPos++) {
-        if (sGlslLine[iCurrentPos] == '=') {
-            break;
-        }
-    }
+    do {
+        size_t iBindingIndexPositionToReplace = 0;
+        bool bSkipThisBinding = false;
 
-    // Make sure we found `=`.
-    if (sGlslLine[iCurrentPos] != '=') [[unlikely]] {
-        return std::format("found `{}` keyword but no `=` after it", sBindingKeyword);
-    }
-    iCurrentPos += 1;
+        auto optionalError =
+            findGlslBindingIndex(sFullSourceCode, iCurrentPos, [&]() -> std::optional<std::string> {
+                // Make sure this is our special assignment character.
+                if (sFullSourceCode[iCurrentPos] != assignBindingIndexCharacter) {
+                    bSkipThisBinding = true;
+                    return {};
+                }
 
-    // Go forward until a non-space character is found.
-    for (; iCurrentPos < sGlslLine.size(); iCurrentPos++) {
-        if (sGlslLine[iCurrentPos] != ' ') {
-            break;
-        }
-    }
+                // Remember this position.
+                iBindingIndexPositionToReplace = iCurrentPos;
 
-    // Make sure we will now have our binding index keyword.
-    if (sGlslLine.find(sAssignBindingIndexKeyword, iCurrentPos) == std::string::npos) {
-        // Found hardcoded index.
-        nextBindingIndex.bFoundHardcodedIndex = true;
-
-        // Make sure we don't mix parser-assigned indices and hardcoded indices.
-        if (nextBindingIndex.iGlslIndex > 0) {
-            return std::format(
-                "unexpected to find a hardcoded binding index at line \"{}\" because some parser-assigned "
-                "indices were already specified",
-                sGlslLine);
+                return {};
+            });
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError;
         }
 
-        return {};
-    }
+        if (iCurrentPos == std::string::npos) {
+            // Found nothing.
+            return {};
+        }
 
-    // Make sure we don't mix parser-assigned indices and hardcoded indices.
-    if (nextBindingIndex.bFoundHardcodedIndex) {
-        return std::format(
-            "unexpected to find a parser-assigned binding index at line \"{}\" because some hardcoded "
-            "indices were already specified",
-            sGlslLine);
-    }
+        if (bSkipThisBinding) {
+            continue;
+        }
 
-    // Erase our keyword.
-    sGlslLine.erase(iCurrentPos, sAssignBindingIndexKeyword.size());
+        // Make sure our index is not used.
+        while (bindingIndicesInfo.usedGlslIndices.find(iNextFreeBindingIndex) !=
+               bindingIndicesInfo.usedGlslIndices.end()) {
+            iNextFreeBindingIndex += 1;
+        }
 
-    // Insert a new binding index.
-    sGlslLine.insert(iCurrentPos, std::to_string(nextBindingIndex.iGlslIndex));
+        // Replace our special character with this index.
+        sFullSourceCode.erase(iBindingIndexPositionToReplace, 1);
+        sFullSourceCode.insert(iBindingIndexPositionToReplace, std::to_string(iNextFreeBindingIndex));
 
-    // Increment next available binding index.
-    nextBindingIndex.iGlslIndex += 1;
+        // Update current position (because we might have changed string length).
+        iCurrentPos = iBindingIndexPositionToReplace;
+
+        // Increment next free binding index (because the current one was assigned just now).
+        iNextFreeBindingIndex += 1;
+    } while (iCurrentPos < sFullSourceCode.size());
 
     return {};
 }
+#endif
 
-std::optional<std::string> CombinedShaderLanguageParser::assignHlslBindingIndexIfFound(
-    std::string& sHlslLine, NextBindingIndex& nextBindingIndex) {
-    // Prepare keywords to look for.
-    const std::string sBindingKeyword = "register(";
-    const std::string_view sRegisterSpaceKeyword = "space";
-
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+std::optional<std::string> CombinedShaderLanguageParser::findHlslRegisterInfo(
+    std::string& sSourceCode,
+    size_t& iCurrentPos,
+    const std::function<std::optional<std::string>()>& onReachedRegisterType,
+    const std::function<std::optional<std::string>()>& onReachedRegisterIndex,
+    const std::function<std::optional<std::string>()>& onReachedRegisterSpaceIndex) {
     // Find binding keyword.
-    auto iCurrentPos = sHlslLine.find(sBindingKeyword);
+    iCurrentPos = sSourceCode.find(sHlslBindingKeyword, iCurrentPos);
     if (iCurrentPos == std::string::npos) {
         return {};
     }
 
     // Jump to binding value.
-    iCurrentPos += sBindingKeyword.size();
+    iCurrentPos += sHlslBindingKeyword.size();
 
-    // Next character should be register type.
-    char registerType = sHlslLine[iCurrentPos];
+    // Skip spaces (if found).
+    for (; iCurrentPos < sSourceCode.size(); iCurrentPos++) {
+        if (sSourceCode[iCurrentPos] != ' ') {
+            break;
+        }
+    }
+    if (iCurrentPos >= sSourceCode.size()) [[unlikely]] {
+        return std::format("found \"{}\" but not found register type", sHlslBindingKeyword);
+    }
+
+    // Reached register type.
+    auto optionalError = onReachedRegisterType();
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError;
+    }
+
+    // Check if user wants to quit.
+    if (iCurrentPos == std::string::npos) {
+        return {};
+    }
     iCurrentPos += 1;
 
-    // Make sure we will now have our binding index keyword.
-    const auto iKeywordPos = sHlslLine.find(sAssignBindingIndexKeyword, iCurrentPos);
-    if (iKeywordPos == std::string::npos) {
-        // Found hardcoded index.
-        nextBindingIndex.bFoundHardcodedIndex = true;
-
-        // Make sure we don't mix parser-assigned indices and hardcoded indices.
-        if (!nextBindingIndex.hlslIndex.empty()) {
-            return std::format(
-                "unexpected to find a hardcoded register index at line \"{}\" because some parser-assigned "
-                "indices were already specified",
-                sHlslLine);
+    // Skip spaces (if found).
+    for (; iCurrentPos < sSourceCode.size(); iCurrentPos++) {
+        if (sSourceCode[iCurrentPos] != ' ') {
+            break;
         }
+    }
+    if (iCurrentPos >= sSourceCode.size()) [[unlikely]] {
+        return "found register type but no register index";
+    }
+
+    // Reached register index.
+    optionalError = onReachedRegisterIndex();
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError;
+    }
+
+    // Check if user wants to quit.
+    if (iCurrentPos == std::string::npos) {
+        return {};
+    }
+
+    // Find closing bracket position.
+    const auto iClosingBracketPosition = sSourceCode.find(')', iCurrentPos);
+
+    // Find register space keyword.
+    const auto iRegisterSpacePos = sSourceCode.find(sHlslRegisterSpaceKeyword.data(), iCurrentPos);
+    if (iRegisterSpacePos != std::string::npos &&
+        iRegisterSpacePos < iClosingBracketPosition) { // Make sure this register space is for our register
+                                                       // (not some next register).
+        iCurrentPos = iRegisterSpacePos + sHlslRegisterSpaceKeyword.size();
+        optionalError = onReachedRegisterSpaceIndex();
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError;
+        }
+
+        // Check if user wants to quit.
+        if (iCurrentPos == std::string::npos) {
+            return {};
+        }
+    }
+
+    iCurrentPos = iClosingBracketPosition;
+
+    return {};
+}
+#endif
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+std::optional<std::string> CombinedShaderLanguageParser::findGlslBindingIndex(
+    std::string& sSourceCode,
+    size_t& iCurrentPos,
+    const std::function<std::optional<std::string>()>& onReachedBindingIndex) {
+    // Find binding keyword.
+    iCurrentPos = sSourceCode.find(sGlslBindingKeyword, iCurrentPos);
+    if (iCurrentPos == std::string::npos) {
+        return {};
+    }
+
+    // Jump to keyword end.
+    iCurrentPos += sGlslBindingKeyword.size();
+
+    // Go forward until `=` is found.
+    for (; iCurrentPos < sSourceCode.size(); iCurrentPos++) {
+        if (sSourceCode[iCurrentPos] == '=') {
+            break;
+        }
+    }
+    if (iCurrentPos >= sSourceCode.size()) [[unlikely]] {
+        return std::format("found \"{}\" but not found `=` after it", sGlslBindingKeyword);
+    }
+
+    // Skip `=`.
+    iCurrentPos += 1;
+
+    // Go forward until a non-space character is found.
+    for (; iCurrentPos < sSourceCode.size(); iCurrentPos++) {
+        if (sSourceCode[iCurrentPos] != ' ') {
+            break;
+        }
+    }
+    if (iCurrentPos >= sSourceCode.size()) [[unlikely]] {
+        return std::format("found \"{}\" but not found binding index after it", sGlslBindingKeyword);
+    }
+
+    onReachedBindingIndex();
+
+    return {};
+}
+#endif
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+std::optional<std::string> CombinedShaderLanguageParser::addHardcodedBindingIndexIfFound(
+    bool bParseAsHlsl, std::string& sCodeLine, BindingIndicesInfo& bindingIndicesInfo) {
+    if (bParseAsHlsl) {
+        // Prepare some variables.
+        size_t iCurrentPos = 0;
+        char registerType = '0';
+        unsigned int iRegisterIndex = 0;
+        unsigned int iRegisterSpace = 0; // default space if not specified
+
+        // Find register values.
+        auto optionalError = findHlslRegisterInfo(
+            sCodeLine,
+            iCurrentPos,
+            [&]() -> std::optional<std::string> {
+                // Reached register type.
+                registerType = sCodeLine[iCurrentPos];
+
+                return {};
+            },
+            [&]() -> std::optional<std::string> {
+                // Reached register index.
+
+                // Make sure it's not our keyword.
+                if (sCodeLine[iCurrentPos] == assignBindingIndexCharacter) {
+                    // Found our keyword, skip this line to assign a binding index later.
+                    iCurrentPos = std::string::npos;
+                    bindingIndicesInfo.bFoundBindingIndicesToAssign = true;
+                    return {};
+                }
+
+                // Read index.
+                auto readResult = readNumberFromString(sCodeLine, iCurrentPos);
+                if (std::holds_alternative<std::string>(readResult)) [[unlikely]] {
+                    return std::get<std::string>(std::move(readResult));
+                }
+                iRegisterIndex = std::get<unsigned int>(readResult);
+
+                return {};
+            },
+            [&]() -> std::optional<std::string> {
+                if (sCodeLine[iCurrentPos] == assignBindingIndexCharacter) [[unlikely]] {
+                    return "`space?` is not supported";
+                }
+
+                // Reached register space.
+                auto readResult = readNumberFromString(sCodeLine, iCurrentPos);
+                if (std::holds_alternative<std::string>(readResult)) [[unlikely]] {
+                    return std::get<std::string>(std::move(readResult));
+                }
+                iRegisterSpace = std::get<unsigned int>(readResult);
+
+                return {};
+            });
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError;
+        }
+
+        if (iCurrentPos == std::string::npos) {
+            // Found nothing.
+            return {};
+        }
+
+        // Check if index value was specified before.
+        const auto registerSpaceIndicesIt = bindingIndicesInfo.usedHlslIndices.find(registerType);
+        if (registerSpaceIndicesIt != bindingIndicesInfo.usedHlslIndices.end()) {
+            // See if there was a hardcoded binding index in this space.
+            const auto registerIndicesIt = registerSpaceIndicesIt->second.find(iRegisterSpace);
+            if (registerIndicesIt != registerSpaceIndicesIt->second.end() &&
+                registerIndicesIt->second.find(iRegisterIndex) != registerIndicesIt->second.end())
+                [[unlikely]] {
+                return std::format(
+                    "binding `{}{}, space{}` was specified multiple times on different resources",
+                    registerType,
+                    iRegisterIndex,
+                    iRegisterSpace);
+            }
+        }
+
+        // Add index as used.
+        bindingIndicesInfo.usedHlslIndices[registerType][iRegisterSpace].insert(iRegisterIndex);
 
         return {};
     }
 
-    // Make sure we don't mix parser-assigned indices and hardcoded indices.
-    if (nextBindingIndex.bFoundHardcodedIndex) {
-        return std::format(
-            "unexpected to find a parser-assigned register index at line \"{}\" because some hardcoded "
-            "indices were already specified",
-            sHlslLine);
-    }
+    // Parse as GLSL.
 
-    // Erase our keyword.
-    sHlslLine.erase(iKeywordPos, sAssignBindingIndexKeyword.size());
-
-    // Prepare variables to store register info.
-    unsigned int iRegisterSpace = 0; // default space if not specified
-    unsigned int iRegisterIndex = 0;
-
-    // See if register space is specified.
-    const auto iRegisterSpacePos = sHlslLine.find(sRegisterSpaceKeyword.data(), iKeywordPos);
-    if (iRegisterSpacePos != std::string::npos) {
-        // Process register space.
-        const auto iRegisterSpaceEndPos = sHlslLine.find(')', iRegisterSpacePos);
-        if (iRegisterSpaceEndPos == std::string::npos) [[unlikely]] {
-            return "found register space but not found `)` after it";
+    size_t iCurrentPos = 0;
+    auto optionalError = findGlslBindingIndex(sCodeLine, iCurrentPos, [&]() -> std::optional<std::string> {
+        // Check for our special assignment character.
+        if (sCodeLine[iCurrentPos] == assignBindingIndexCharacter) {
+            bindingIndicesInfo.bFoundBindingIndicesToAssign = true;
+            return {};
         }
 
-        // Read register space value.
-        std::string sRegisterSpaceValue;
-        for (size_t i = iRegisterSpacePos + sRegisterSpaceKeyword.size(); i < sHlslLine.size(); i++) {
-            if (std::isdigit(static_cast<unsigned char>(sHlslLine[i])) == 0) {
-                break;
-            }
-            sRegisterSpaceValue += sHlslLine[i];
-        }
+        // Found hardcoded index.
 
-        // Make sure it's not empty.
-        if (sRegisterSpaceValue.empty()) [[unlikely]] {
-            return "found register `space` keyword but no digit after it";
+        // Read index value.
+        auto readResult = readNumberFromString(sCodeLine, iCurrentPos);
+        if (std::holds_alternative<std::string>(readResult)) [[unlikely]] {
+            return std::get<std::string>(std::move(readResult));
         }
+        const auto iHardcodedBindingIndex = std::get<unsigned int>(readResult);
 
-        // Convert to integer.
-        try {
-            iRegisterSpace = static_cast<unsigned int>(std::stoul(sRegisterSpaceValue));
-        } catch (const std::exception& exception) {
+        // Make sure this index value was not specified before.
+        const auto bindingIndexIt = bindingIndicesInfo.usedGlslIndices.find(iHardcodedBindingIndex);
+        if (bindingIndexIt != bindingIndicesInfo.usedGlslIndices.end()) [[unlikely]] {
             return std::format(
-                "failed to convert register space string \"{}\" to integer, error: {}",
-                sRegisterSpaceValue,
-                exception.what());
+                "hardcoded binding index {} was specified multiple times on different resources",
+                iHardcodedBindingIndex);
         }
+
+        // Add index as used.
+        bindingIndicesInfo.usedGlslIndices.insert(iHardcodedBindingIndex);
+
+        return {};
+    });
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError;
     }
 
-    // Get binding info.
-    auto& binding = nextBindingIndex.hlslIndex[registerType];
-
-    // Get binding index.
-    auto bindingIt = binding.find(iRegisterSpace);
-    if (bindingIt == binding.end()) {
-        iRegisterIndex = 0;
-
-        // Increment next available binding index.
-        binding[iRegisterSpace] = 1;
-    } else {
-        iRegisterIndex = bindingIt->second;
-
-        // Increment next available binding index.
-        bindingIt->second += 1;
+    if (iCurrentPos == std::string::npos) {
+        // Found nothing.
+        return {};
     }
-
-    // Insert a new binding index.
-    sHlslLine.insert(iKeywordPos, std::to_string(iRegisterIndex));
 
     return {};
 }
+#endif
 
 void CombinedShaderLanguageParser::replaceSubstring(
     std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo) {
@@ -526,6 +816,33 @@ void CombinedShaderLanguageParser::replaceSubstring(
         // Increment current position.
         iCurrentPosition += sReplaceTo.size();
     } while (iCurrentPosition < sText.size());
+}
+
+std::variant<unsigned int, std::string>
+CombinedShaderLanguageParser::readNumberFromString(const std::string& sText, size_t iReadStartPosition) {
+    // Read value.
+    std::string sValue;
+    for (size_t i = iReadStartPosition; i < sText.size(); i++) {
+        if (std::isdigit(static_cast<unsigned char>(sText[i])) == 0) {
+            break;
+        }
+        sValue += sText[i];
+    }
+
+    // Make sure it's not empty.
+    if (sValue.empty()) [[unlikely]] {
+        return "no digit was found";
+    }
+
+    // Convert to integer.
+    unsigned int iValue = 0;
+    try {
+        iValue = static_cast<unsigned int>(std::stoul(sValue));
+    } catch (const std::exception& exception) {
+        return std::format("failed to convert string \"{}\" to integer, error: {}", sValue, exception.what());
+    }
+
+    return iValue;
 }
 
 std::variant<std::optional<std::filesystem::path>, CombinedShaderLanguageParser::Error>
@@ -597,4 +914,57 @@ CombinedShaderLanguageParser::findIncludePath(
     }
 
     return pathToIncludedFile;
+}
+
+std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::finalizeParsingResults(
+    const std::filesystem::path& pathToShaderSourceFile,
+    bool bParseAsHlsl,
+    BindingIndicesInfo& bindingIndicesInfo,
+    std::string& sFullParsedSourceCode,
+    std::vector<std::string>& vAdditionalPushConstants) {
+#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+    // Now insert additional push constants.
+    if (!vAdditionalPushConstants.empty()) {
+        // Find where push constants start.
+        const auto iPushConstantsStartPos = sFullParsedSourceCode.find("layout(push_constant)");
+        if (iPushConstantsStartPos == std::string::npos) [[unlikely]] {
+            return Error(
+                "additional push constants were found and includes of the file were processed "
+                "but initial push constants layout was not found in the included files",
+                sFullParsedSourceCode);
+        }
+
+        // Look for '}' after push constants.
+        const auto iPushConstantsEndPos = sFullParsedSourceCode.find('}', iPushConstantsStartPos);
+        if (iPushConstantsEndPos == std::string::npos) [[unlikely]] {
+            return Error(
+                "expected to find a closing bracket after push constants definition", pathToShaderSourceFile);
+        }
+
+        const size_t iAdditionalPushConstantsInsertPos = iPushConstantsEndPos;
+
+        // Insert additional push constants (insert in reserve order because of how `std::string::insert`
+        // below works, to make the resulting order is correct).
+        for (auto reverseIt = vAdditionalPushConstants.rbegin(); reverseIt != vAdditionalPushConstants.rend();
+             ++reverseIt) {
+            auto& sPushConstant = *reverseIt;
+            if (!sPushConstant.ends_with('\n')) {
+                sPushConstant += '\n';
+            }
+            sFullParsedSourceCode.insert(iAdditionalPushConstantsInsertPos, sPushConstant);
+        }
+    }
+#endif
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+    if (bindingIndicesInfo.bFoundBindingIndicesToAssign) {
+        // Assign binding indices.
+        auto optionalError = assignBindingIndices(bParseAsHlsl, sFullParsedSourceCode, bindingIndicesInfo);
+        if (optionalError.has_value()) [[unlikely]] {
+            return Error(optionalError.value(), pathToShaderSourceFile);
+        }
+    }
+#endif
+
+    return {};
 }

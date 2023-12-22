@@ -5,9 +5,9 @@
 #hlsl }; ConstantBuffer<FrameData> frameData : register(b?);
 
 #glsl{
-layout(binding = 1) uniform SomeData {
+layout(binding = 0) uniform SomeData {
     uint iTest;
 };
 }
 
-#hlsl ConstantBuffer<uint> someData : register(b1);
+#hlsl ConstantBuffer<uint> someData : register(b0);

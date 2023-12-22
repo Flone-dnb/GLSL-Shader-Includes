@@ -6,6 +6,7 @@ Since HLSL and GLSL are kind of similar, using this simple parser you can avoid 
 // input file
 
 #hlsl cbuffer frameData : register(b?, space5){   // <- `?` here tells the parser to assign a free index
+#glsl layout(binding = ?) uniform sampler2D diffuseTexture[]; // <- `?` will be replaced
 #glsl layout(binding = ?) uniform frameData{
     mat4 viewProjectionMatrix;
     vec3 cameraPosition;
@@ -24,7 +25,9 @@ cbuffer frameData : register(b0, space5){   // `#glsl` content was removed, inde
 when `parseGlsl` is used you will get the following code:
 
 ```
-layout(binding = 0) uniform frameData{     // `#hlsl` content was removed, index `0` was assigned
+// `#hlsl` content was removed
+layout(binding = 0) uniform sampler2D diffuseTexture[]; // index `0` was assigned
+layout(binding = 1) uniform frameData{                  // index `1` was assigned
     mat4 viewProjectionMatrix;
     vec3 cameraPosition;
 };
@@ -82,7 +85,8 @@ In your cmake file:
 ```cmake
 set(CSL_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(CSL_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
-set(CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE) // optional
+set(CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE)          // optional
+set(CSL_ENABLE_AUTOMATIC_BINDING_INDEX_ASSIGNMENT_KEYWORD OFF CACHE BOOL "" FORCE) // optional
 add_subdirectory(<some path here>/combined-shader-language-parser SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC CombinedShaderLanguageParserLib)
 ```
@@ -102,6 +106,8 @@ const auto sFullSourceCode = std::get<std::string>(std::move(result));
 ```
 
 ## Optional features
+
+### Additional push constants
 
 `CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
 
@@ -129,6 +135,35 @@ layout(push_constant) uniform Indices
     uint arrayIndex;
     uint someIndex;
 } indices;
+
+```
+
+### Automatic binding indices
+
+`CSL_ENABLE_AUTOMATIC_BINDING_INDEX_ASSIGNMENT_KEYWORD` is used to enable special `?` character which is used to tell the parser to assign free (unused) binding indices, for example:
+
+```GLSL
+// ----------------- myfile.glsl -----------------
+
+#hlsl cbuffer frameData : register(b0, space5);               // hardcoded index             
+#hlsl cbuffer someOtherData : register(b?);                   // <- `?` here tells the parser to assign a free index
+#hlsl Texture2D diffuseTexture : register(t?, space5);
+#hlsl Texture2D normalTexture : register(t?, space5);
+
+#glsl layout(binding = ?) uniform sampler2D diffuseTexture[]; // <- `?` will be replaced
+#glsl layout(binding = ?) uniform sampler2D normalTexture[];
+
+// ----------------- myfile.glsl as HLSL -----------------
+
+cbuffer frameData : register(b0, space5); 
+cbuffer someOtherData : register(b0);                     // `b0` because `space0` not `space5`
+Texture2D diffuseTexture : register(t0, space5);
+Texture2D normalTexture : register(t1, space5);
+
+// ----------------- myfile.glsl as GLSL -----------------     
+
+layout(binding = 0) uniform sampler2D diffuseTexture[];
+layout(binding = 1) uniform sampler2D normalTexture[];
 
 ```
 
