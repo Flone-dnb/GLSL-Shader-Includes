@@ -711,21 +711,8 @@ std::optional<std::string> CombinedShaderLanguageParser::addHardcodedBindingInde
             return {};
         }
 
-        // Check if index value was specified before.
-        const auto registerSpaceIndicesIt = bindingIndicesInfo.usedHlslIndices.find(registerType);
-        if (registerSpaceIndicesIt != bindingIndicesInfo.usedHlslIndices.end()) {
-            // See if there was a hardcoded binding index in this space.
-            const auto registerIndicesIt = registerSpaceIndicesIt->second.find(iRegisterSpace);
-            if (registerIndicesIt != registerSpaceIndicesIt->second.end() &&
-                registerIndicesIt->second.find(iRegisterIndex) != registerIndicesIt->second.end())
-                [[unlikely]] {
-                return std::format(
-                    "binding `{}{}, space{}` was specified multiple times on different resources",
-                    registerType,
-                    iRegisterIndex,
-                    iRegisterSpace);
-            }
-        }
+        // Don't check if register was already specified or not because some includes might be
+        // hidden behind #ifdef which we don't expand.
 
         // Add index as used.
         bindingIndicesInfo.usedHlslIndices[registerType][iRegisterSpace].insert(iRegisterIndex);
@@ -752,13 +739,8 @@ std::optional<std::string> CombinedShaderLanguageParser::addHardcodedBindingInde
         }
         const auto iHardcodedBindingIndex = std::get<unsigned int>(readResult);
 
-        // Make sure this index value was not specified before.
-        const auto bindingIndexIt = bindingIndicesInfo.usedGlslIndices.find(iHardcodedBindingIndex);
-        if (bindingIndexIt != bindingIndicesInfo.usedGlslIndices.end()) [[unlikely]] {
-            return std::format(
-                "hardcoded binding index {} was specified multiple times on different resources",
-                iHardcodedBindingIndex);
-        }
+        // Don't check if index was already specified or not because some includes might be
+        // hidden behind #ifdef which we don't expand.
 
         // Add index as used.
         bindingIndicesInfo.usedGlslIndices.insert(iHardcodedBindingIndex);
