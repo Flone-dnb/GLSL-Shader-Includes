@@ -1,4 +1,4 @@
-layout(push_constant) uniform Indices
+struct RootConstants
 {
     uint baseIndex;
     uint someIndex1;
@@ -7,7 +7,7 @@ layout(push_constant) uniform Indices
     uint additionalIndex2;
 uint additionalIndex3;
 uint newConstant;
-} indices;
+};
 
 
 

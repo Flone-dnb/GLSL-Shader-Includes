@@ -8,9 +8,9 @@ set(BUILD_DIRECTORY_NAME OUTPUT)
 option(CSL_ENABLE_TESTS "Defines whether to add tests target or not." ON)
 
 # Optional feature.
-option(CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD "Defines whether contents of `#additional_push_constants` will be removed and added to push constants or not." ON)
-if (CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
-    add_compile_definitions(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+option(CSL_ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD "Defines whether contents of `#additional_push_constants` or `#additional_root_constants` will be removed and added to push/root constants or not." ON)
+if (CSL_ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
+    add_compile_definitions(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
 endif()
 
 # Optional feature.

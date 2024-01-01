@@ -78,9 +78,13 @@ void testCompareParsingResults(
     INFO("[TEST PASSED] directory: " + pathToDirectory.filename().string());
 }
 
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+#if defined(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
 TEST_CASE("parse a sample file with additional push constants") {
     testCompareParsingResults("res/test/additional_push_constants");
+}
+
+TEST_CASE("parse a sample file with additional root constants") {
+    testCompareParsingResults("res/test/additional_root_constants");
 }
 #endif
 

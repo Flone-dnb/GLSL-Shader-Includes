@@ -56,13 +56,25 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
 }
 
 std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::processKeywordCode(
-    std::string_view sKeyword,
+    const std::vector<std::string_view>& vKeywords,
     std::string& sLineBuffer,
     std::ifstream& file,
     const std::filesystem::path& pathToShaderSourceFile,
-    const std::function<std::optional<Error>(std::string&)>& processContent) {
-    // Look for the keyword.
-    const auto iKeywordPosition = sLineBuffer.find(sKeyword);
+    const std::function<std::optional<Error>(std::string_view sKeyword, std::string& sText)>&
+        processContent) {
+    // Find a keyword.
+    std::string sKeyword;
+    size_t iKeywordPosition = std::string::npos;
+    for (const auto& sTestKeyword : vKeywords) {
+        // Look for the keyword.
+        iKeywordPosition = sLineBuffer.find(sTestKeyword);
+        if (iKeywordPosition == std::string::npos) {
+            continue;
+        }
+
+        sKeyword = sTestKeyword;
+        break;
+    }
     if (iKeywordPosition == std::string::npos) {
         return {};
     }
@@ -99,7 +111,7 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
             sLineBuffer.size() - 1) { // `-1` to make sure there is at least 1 character to process
             // Trigger callback on text after keyword.
             std::string sBodyText = sLineBuffer.substr(iBodyStartPosition);
-            return processContent(sBodyText);
+            return processContent(sKeyword, sBodyText);
         }
 
         // Read next line.
@@ -136,7 +148,7 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
             iNestedScopeCount -= 1;
         }
 
-        auto optionalError = processContent(sLineBuffer);
+        auto optionalError = processContent(sKeyword, sLineBuffer);
         if (optionalError.has_value()) [[unlikely]] {
             return optionalError;
         }
@@ -156,7 +168,7 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     const std::filesystem::path& pathToShaderSourceFile,
     bool bParseAsHlsl,
     BindingIndicesInfo& bindingIndicesInfo,
-    std::vector<std::string>& vFoundAdditionalPushConstants,
+    std::vector<std::string>& vFoundAdditionalShaderConstants,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
     // Make sure the specified path exists.
     if (!std::filesystem::exists(pathToShaderSourceFile)) [[unlikely]] {
@@ -182,20 +194,31 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
     std::string sFullSourceCode;
     std::string sLineBuffer;
     while (std::getline(file, sLineBuffer)) {
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+#if defined(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
         // Process additional push constants (if found).
         bool bFoundAdditionalPushConstants = false;
+        std::vector<std::string_view> vShaderConstantsKeywords = {};
         auto optionalError = processKeywordCode(
-            sAdditionalPushConstantsKeyword,
+            {sAdditionalShaderConstantsKeyword,
+             sAdditionalRootConstantsKeyword,
+             sAdditionalPushConstantsKeyword},
             sLineBuffer,
             file,
             pathToShaderSourceFile,
-            [&](std::string& sText) -> std::optional<Error> {
+            [&](std::string_view sKeyword, std::string& sText) -> std::optional<Error> {
+                // Skip this block after we finish processing it.
+                bFoundAdditionalPushConstants = true;
+
+                // Ignore variables if wrong keyword.
+                if ((bParseAsHlsl && sKeyword == sAdditionalPushConstantsKeyword) ||
+                    (!bParseAsHlsl && sKeyword == sAdditionalRootConstantsKeyword)) {
+                    return {};
+                }
+
                 if (bParseAsHlsl) {
                     convertGlslTypesToHlslTypes(sText);
                 }
-                vFoundAdditionalPushConstants.push_back(sText);
-                bFoundAdditionalPushConstants = true;
+                vFoundAdditionalShaderConstants.push_back(sText);
                 return {};
             });
         if (optionalError.has_value()) [[unlikely]] {
@@ -209,11 +232,11 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         // Process GLSL keyword (if found).
         bool bFoundLanguageKeyword = false;
         optionalError = processKeywordCode(
-            sGlslKeyword,
+            {sGlslKeyword},
             sLineBuffer,
             file,
             pathToShaderSourceFile,
-            [&](std::string& sText) -> std::optional<Error> {
+            [&](std::string_view sKeyword, std::string& sText) -> std::optional<Error> {
                 if (bParseAsHlsl) {
                     // Ignore this block.
                     bFoundLanguageKeyword = true;
@@ -243,11 +266,11 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         // Process HLSL keyword (if found).
         bFoundLanguageKeyword = false;
         optionalError = processKeywordCode(
-            sHlslKeyword,
+            {sHlslKeyword},
             sLineBuffer,
             file,
             pathToShaderSourceFile,
-            [&](std::string& sText) -> std::optional<Error> {
+            [&](std::string_view sKeyword, std::string& sText) -> std::optional<Error> {
                 if (!bParseAsHlsl) {
                     // Ignore this block.
                     bFoundLanguageKeyword = true;
@@ -307,7 +330,7 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
             optionalIncludedPath.value(),
             bParseAsHlsl,
             bindingIndicesInfo,
-            vFoundAdditionalPushConstants,
+            vFoundAdditionalShaderConstants,
             vAdditionalIncludeDirectories);
         if (std::holds_alternative<Error>(result)) [[unlikely]] {
             return std::get<Error>(result);
@@ -895,38 +918,44 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
     bool bParseAsHlsl,
     BindingIndicesInfo& bindingIndicesInfo,
     std::string& sFullParsedSourceCode,
-    std::vector<std::string>& vAdditionalPushConstants,
+    std::vector<std::string>& vAdditionalShaderConstants,
     unsigned int iBaseAutomaticBindingIndex) {
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
-    // Now insert additional push constants.
-    if (!vAdditionalPushConstants.empty()) {
+#if defined(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
+    // Now insert additional shader constants.
+    if (!vAdditionalShaderConstants.empty()) {
         // Find where push constants start.
-        const auto iPushConstantsStartPos = sFullParsedSourceCode.find("layout(push_constant)");
-        if (iPushConstantsStartPos == std::string::npos) [[unlikely]] {
+        size_t iShaderConstantsStartPos = 0;
+        if (bParseAsHlsl) {
+            iShaderConstantsStartPos = sFullParsedSourceCode.find("struct RootConstants");
+        } else {
+            iShaderConstantsStartPos = sFullParsedSourceCode.find("layout(push_constant)");
+        }
+        if (iShaderConstantsStartPos == std::string::npos) [[unlikely]] {
             return Error(
                 "additional push constants were found and includes of the file were processed "
                 "but initial push constants layout was not found in the included files",
                 sFullParsedSourceCode);
         }
 
-        // Look for '}' after push constants.
-        const auto iPushConstantsEndPos = sFullParsedSourceCode.find('}', iPushConstantsStartPos);
-        if (iPushConstantsEndPos == std::string::npos) [[unlikely]] {
+        // Look for '}' after shader constants.
+        const auto iShaderConstantsEndPos = sFullParsedSourceCode.find('}', iShaderConstantsStartPos);
+        if (iShaderConstantsEndPos == std::string::npos) [[unlikely]] {
             return Error(
                 "expected to find a closing bracket after push constants definition", pathToShaderSourceFile);
         }
 
-        const size_t iAdditionalPushConstantsInsertPos = iPushConstantsEndPos;
+        const size_t iAdditionalShaderConstantsInsertPos = iShaderConstantsEndPos;
 
         // Insert additional push constants (insert in reserve order because of how `std::string::insert`
         // below works, to make the resulting order is correct).
-        for (auto reverseIt = vAdditionalPushConstants.rbegin(); reverseIt != vAdditionalPushConstants.rend();
+        for (auto reverseIt = vAdditionalShaderConstants.rbegin();
+             reverseIt != vAdditionalShaderConstants.rend();
              ++reverseIt) {
             auto& sPushConstant = *reverseIt;
             if (!sPushConstant.ends_with('\n')) {
                 sPushConstant += '\n';
             }
-            sFullParsedSourceCode.insert(iAdditionalPushConstantsInsertPos, sPushConstant);
+            sFullParsedSourceCode.insert(iAdditionalShaderConstantsInsertPos, sPushConstant);
         }
     }
 #endif

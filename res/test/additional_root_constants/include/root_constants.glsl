@@ -1,0 +1,4 @@
+struct RootConstants
+{
+    uint baseIndex;
+};

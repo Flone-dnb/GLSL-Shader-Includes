@@ -57,7 +57,7 @@ What this parser does:
 
 - Replaces `#include "relative/path"` with included file contents - might be useful in GLSL.
 - Allows to specify additional include directories before parsing.
-- Appends variables from blocks marked as `#additional_push_constants` to the initial (probably included) push constants layout definition to allow "extending" push constants from other files - might be useful in Vulkan applications.
+- Appends variables from blocks marked as `#additional_push_constants` or `#additional_root_constants` to the initial (probably included) push constants layout definition to allow "extending" root/push constants from other files - might be useful in some applications.
 - Has two modes: `parseHlsl` and `parseGlsl`:
     - `parseHlsl` parses the specified file and replaces simple GLSL types (see the full list of conversions performed by the parser below) to HLSL types (such as `float3` and `float3x3`) in the memory while reading (source file will not be changed) - allows you to have 1 shader written with GLSL types and process it in both DirectX and Vulkan/OpenGL.
     - `parseGlsl` just parses the file as usual (no type conversion will be applied).
@@ -85,7 +85,7 @@ In your cmake file:
 ```cmake
 set(CSL_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(CSL_ENABLE_DOXYGEN OFF CACHE BOOL "" FORCE)
-set(CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE)          // optional
+set(CSL_ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD OFF CACHE BOOL "" FORCE)        // optional
 set(CSL_ENABLE_AUTOMATIC_BINDING_INDEX_ASSIGNMENT_KEYWORD OFF CACHE BOOL "" FORCE) // optional
 add_subdirectory(<some path here>/combined-shader-language-parser SYSTEM)
 target_link_libraries(${PROJECT_NAME} PUBLIC CombinedShaderLanguageParserLib)
@@ -107,26 +107,31 @@ const auto sFullSourceCode = std::get<std::string>(std::move(result));
 
 ## Optional features
 
-### Additional push constants
+### Additional push/root constants
 
-`CSL_ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` keyword which is used to append variables to a push constants struct (located in a separate shader file), for example:
+`CSL_ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD` is used to enable `#additional_push_constants` / `#additional_root_constants` / `#additional_shader_constants` keyword which is used to append variables to a push/root constants struct (located in a separate shader file), for example:
 
 ```GLSL
 // ----------------- SomePushConstants.glsl -----------------
 
 layout(push_constant) uniform Indices
 {
-   uint arrayIndex;
+    uint arrayIndex;
 } indices;
+
+struct RootConstants{
+    uint arrayIndex;
+}; ConstantBuffer<RootConstants> rootConstants : register(b0);
 
 // ----------------- myfile.glsl -----------------
 
 #include "SomePushConstants.glsl"
 
-#additional_push_constants
-{
-    uint someIndex;
-}
+#additional_push_constants uint someIndex;
+#additional_root_constants uint someIndex;
+
+// or just:
+#additional_shader_constants uint someIndex;
 
 // ----------------- resulting myfile.glsl -----------------
 
@@ -135,6 +140,11 @@ layout(push_constant) uniform Indices
     uint arrayIndex;
     uint someIndex;
 } indices;
+
+struct RootConstants{
+    uint arrayIndex;
+    uint someIndex;
+}; ConstantBuffer<RootConstants> rootConstants : register(b0);
 
 ```
 

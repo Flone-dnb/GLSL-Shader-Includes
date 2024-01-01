@@ -100,20 +100,22 @@ private:
      * }
      * @endcode
      *
-     * @param sKeyword               Keyword to look for, for example: `#hlsl`.
+     * @param vKeywords              Different variants of the keyword to look for, for example: `#hlsl`.
      * @param sLineBuffer            Current line from the file.
      * @param file                   File to read additional lines if additional push constants were found.
      * @param pathToShaderSourceFile Path to file being processed.
-     * @param processContent         Callback with text (whole file line or line after keyword).
+     * @param processContent         Callback with text (whole file line or line after keyword) and a keyword
+     * that was found.
      *
      * @return Error if something went wrong.
      */
     static std::optional<Error> processKeywordCode(
-        std::string_view sKeyword,
+        const std::vector<std::string_view>& vKeywords,
         std::string& sLineBuffer,
         std::ifstream& file,
         const std::filesystem::path& pathToShaderSourceFile,
-        const std::function<std::optional<Error>(std::string&)>& processContent);
+        const std::function<std::optional<Error>(std::string_view sKeyword, std::string& sText)>&
+            processContent);
 
     /**
      * Starts parsing using the specified path.
@@ -137,11 +139,11 @@ private:
     /**
      * Parses the specified file.
      *
-     * @param pathToShaderSourceFile        Path to the file to parseFile.
-     * @param bParseAsHlsl                  Whether to parseFile as HLSL or as GLSL.
-     * @param bindingIndicesInfo            Information about binding indices.
-     * @param vFoundAdditionalPushConstants Additional push constants that were found during parsing.
-     * @param vAdditionalIncludeDirectories Paths to directories in which included files can be found.
+     * @param pathToShaderSourceFile          Path to the file to parseFile.
+     * @param bParseAsHlsl                    Whether to parseFile as HLSL or as GLSL.
+     * @param bindingIndicesInfo              Information about binding indices.
+     * @param vFoundAdditionalShaderConstants Additional shaders constants that were found during parsing.
+     * @param vAdditionalIncludeDirectories   Paths to directories in which included files can be found.
      *
      * @return Error if something went wrong, otherwise parsed source code.
      */
@@ -149,17 +151,17 @@ private:
         const std::filesystem::path& pathToShaderSourceFile,
         bool bParseAsHlsl,
         BindingIndicesInfo& bindingIndicesInfo,
-        std::vector<std::string>& vFoundAdditionalPushConstants,
+        std::vector<std::string>& vFoundAdditionalShaderConstants,
         const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories);
 
     /**
      * Called after a file and all of its includes were parsed to do final parsing logic.
      *
-     * @param pathToShaderSourceFile   Path to the file to parse.
-     * @param bParseAsHlsl             Whether to parse as HLSL or as GLSL.
-     * @param bindingIndicesInfo       Information about binding indices.
-     * @param sFullParsedSourceCode    Parsed source code.
-     * @param vAdditionalPushConstants Additional push constants that were found during parsing.
+     * @param pathToShaderSourceFile     Path to the file to parse.
+     * @param bParseAsHlsl               Whether to parse as HLSL or as GLSL.
+     * @param bindingIndicesInfo         Information about binding indices.
+     * @param sFullParsedSourceCode      Parsed source code.
+     * @param vAdditionalShaderConstants Additional push constants that were found during parsing.
      * @param iBaseAutomaticBindingIndex Used only if parsing as GLSL. If you use `?` character to ask the
      * parser to specify automatic free (unused) binding indices, this value will be used as the smallest
      * (starting) auto-generated binding index counter so that all parser-generated binding indices will be
@@ -172,7 +174,7 @@ private:
         bool bParseAsHlsl,
         BindingIndicesInfo& bindingIndicesInfo,
         std::string& sFullParsedSourceCode,
-        std::vector<std::string>& vAdditionalPushConstants,
+        std::vector<std::string>& vAdditionalShaderConstants,
         unsigned int iBaseAutomaticBindingIndex = 0);
 
     /**
@@ -321,11 +323,23 @@ private:
     /** HLSL keyword used to specify shader resource binding space. */
     static constexpr std::string_view sHlslRegisterSpaceKeyword = "space";
 
-#if defined(ENABLE_ADDITIONAL_PUSH_CONSTANTS_KEYWORD)
+#if defined(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
     /**
      * Keyword used to specify variables that should be appended to the actual push constants struct
      * located in a separate file.
      */
     static inline const std::string sAdditionalPushConstantsKeyword = "#additional_push_constants";
+
+    /**
+     * Keyword used to specify variables that should be appended to the actual root constants struct
+     * located in a separate file.
+     */
+    static inline const std::string sAdditionalRootConstantsKeyword = "#additional_root_constants";
+
+    /**
+     * Keyword used to specify variables that should be appended to the actual push/root constants struct
+     * located in a separate file.
+     */
+    static inline const std::string sAdditionalShaderConstantsKeyword = "#additional_shader_constants";
 #endif
 };
