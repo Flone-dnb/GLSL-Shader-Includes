@@ -46,30 +46,3 @@ jobs:
         Copy-Item -Path ../res -Recurse -Destination ./OUTPUT/csl_tests/Release/ -Container
         ./OUTPUT/csl_tests/Release/CombinedShaderLanguageParserTests.exe
       working-directory: build
-  build-tests-linux:
-    name: Build and run tests on Linux
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-    - name: Pull submodules
-      run: git submodule update --init --recursive
-    - name: Install dependencies
-      run: |
-        sudo apt install doxygen
-    - name: Create build directory
-      run: mkdir build
-    - name: Test (debug)
-      run: |
-        cmake -DCMAKE_BUILD_TYPE=Debug ..
-        cmake --build . --config Debug
-        cp -r ../res ./OUTPUT/csl_tests/
-        ./OUTPUT/csl_tests/CombinedShaderLanguageParserTests
-      working-directory: build
-    - name: Test (release)
-      run: |
-        cmake -DCMAKE_BUILD_TYPE=Release ..
-        cmake --build . --config Release
-        cp -r ../res ./OUTPUT/csl_tests/
-        ./OUTPUT/csl_tests/CombinedShaderLanguageParserTests
-      working-directory: build
