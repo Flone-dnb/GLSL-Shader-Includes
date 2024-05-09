@@ -22,22 +22,12 @@ jobs:
         echo "Installed doxygen of version $(doxygen -v)."
     - name: Create build directory
       run: mkdir build
-    - name: Build (debug)
-      run: |
-        cmake -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Debug ..
-        cmake --build . --target ALL_BUILD --config Debug
-      working-directory: build
     - name: Test (debug)
       run: |
         cmake -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Debug ..
         cmake --build . --target csl_tests --config Debug
         Copy-Item -Path ../res -Recurse -Destination ./OUTPUT/csl_tests/Debug/ -Container
         ./OUTPUT/csl_tests/Debug/CombinedShaderLanguageParserTests.exe
-      working-directory: build
-    - name: Build (release)
-      run: |
-        cmake -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release ..
-        cmake --build . --target ALL_BUILD --config Release
       working-directory: build
     - name: Test (release)
       run: |
@@ -59,22 +49,12 @@ jobs:
         sudo apt install doxygen
     - name: Create build directory
       run: mkdir build
-    - name: Build (debug)
-      run: |
-        cmake -DCMAKE_BUILD_TYPE=Debug ..
-        cmake --build . --target ALL_BUILD --config Debug
-      working-directory: build
     - name: Test (debug)
       run: |
         cmake -DCMAKE_BUILD_TYPE=Debug ..
         cmake --build . --target csl_tests --config Debug
         cp -r ../res ./OUTPUT/csl_tests/
         ./OUTPUT/csl_tests/CombinedShaderLanguageParserTests
-      working-directory: build
-    - name: Build (release)
-      run: |
-        cmake -DCMAKE_BUILD_TYPE=Release ..
-        cmake --build . --target ALL_BUILD --config Release
       working-directory: build
     - name: Test (release)
       run: |
