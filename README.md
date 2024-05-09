@@ -48,6 +48,24 @@ Here are all forms of a language block:
 }
 ```
 
+There is also an experimental and somewhat limited support for mixed keywords on the same line:
+
+```
+#glsl layout(binding = 0) uniform #hlsl struct #both ComputeInfo {
+    uint iThreadGroupCountX;
+} #glsl computeInfo; #hlsl ; ConstantBuffer<ComputeInfo> computeInfo : register(b0, space5);
+
+// as GLSL:
+layout(binding = 0) uniform ComputeInfo {
+    uint iThreadGroupCountX;
+} computeInfo;
+
+// as HLSL:
+struct ComputeInfo {
+    uint iThreadGroupCountX;
+} ; ConstantBuffer<ComputeInfo> computeInfo : register(b0, space5);
+```
+
 Note:
 
 - This parser does not have a fixed file extension and it just processes the file you give to it.

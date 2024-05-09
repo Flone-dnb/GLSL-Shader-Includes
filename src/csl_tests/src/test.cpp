@@ -106,4 +106,8 @@ TEST_CASE("parse a file with hardcoded binding indices before parser-assigned") 
 TEST_CASE("parse a file with mixed indices and non-zero auto binding index") {
     testCompareParsingResults("res/test/non_zero_base_auto_binding_index", 100);
 }
+
+TEST_CASE("parse a file with mixed keywords on the same line") {
+    testCompareParsingResults("res/test/mixed_language_keywords");
+}
 #endif

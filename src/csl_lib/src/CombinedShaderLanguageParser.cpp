@@ -164,7 +164,117 @@ std::optional<CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser:
     return {};
 }
 
-std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLanguageParser::parseFile(
+std::variant<bool, CombinedShaderLanguageParser::Error>
+CombinedShaderLanguageParser::processMixedLanguageLine(
+    std::string& sLineBuffer,
+    const std::filesystem::path& pathToShaderSourceFile,
+    const std::function<std::optional<Error>(std::string_view, std::string&)>& processContent) {
+    // Make sure all 3 keywords are on the same line.
+    const auto iHlslKeywordPos = sLineBuffer.find(sHlslKeyword);
+    const auto iGlslKeywordPos = sLineBuffer.find(sGlslKeyword);
+    const auto iBothKeywordPos = sLineBuffer.find(sBothKeyword);
+
+    if (iHlslKeywordPos == std::string::npos || iGlslKeywordPos == std::string::npos) {
+        return false;
+    }
+
+    // Prepare a struct to store info about tagged section on code (tagged as HLSL/GLSL or both).
+    struct TaggedSection {
+        TaggedSection() = delete;
+        TaggedSection(std::string_view sKeyword, size_t iKeywordStartPos)
+            : sKeyword(sKeyword), iKeywordStartPos(iKeywordStartPos) {
+            iCodeStartPos = iKeywordStartPos + sKeyword.size() + 1; // `+1` for a space after the keyword
+        }
+
+        std::string_view sKeyword;
+        size_t iKeywordStartPos = 0;
+        size_t iCodeStartPos = 0;
+    };
+
+    std::vector<TaggedSection> vTaggedSections = {
+        TaggedSection(sHlslKeyword, iHlslKeywordPos), TaggedSection(sGlslKeyword, iGlslKeywordPos)};
+    if (iBothKeywordPos != std::string::npos) {
+        vTaggedSections.push_back(TaggedSection(sBothKeyword, iBothKeywordPos));
+    }
+
+    // Sort them by their position.
+    std::sort(
+        vTaggedSections.begin(),
+        vTaggedSections.end(),
+        [](const TaggedSection& section1, const TaggedSection& section2) -> bool {
+            return section1.iKeywordStartPos < section2.iKeywordStartPos;
+        });
+
+    const auto& section1 = vTaggedSections[0];
+    const auto& section2 = vTaggedSections[1];
+
+    std::optional<Error> optionalError = {};
+
+    // Check if there is some code before the first keyword.
+    if (section1.iKeywordStartPos != 0) {
+        auto sCodeBeforeSections = sLineBuffer.substr(0, section1.iKeywordStartPos);
+        optionalError = processContent("", sCodeBeforeSections);
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError.value();
+        }
+    }
+
+    // Process section 1.
+    {
+        const auto iSection1CodeLength = section2.iKeywordStartPos - section1.iCodeStartPos;
+        if (iSection1CodeLength == 0) [[unlikely]] {
+            return Error(
+                std::format("no code/space between keywords on line \"{}\"", sLineBuffer),
+                pathToShaderSourceFile);
+        }
+
+        auto sCodeInSection1 = sLineBuffer.substr(section1.iCodeStartPos, iSection1CodeLength);
+
+        optionalError = processContent(section1.sKeyword, sCodeInSection1);
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError.value();
+        }
+    }
+
+    // Process section 2.
+    {
+        const auto iSectionEndPos =
+            vTaggedSections.size() == 3 ? vTaggedSections[2].iKeywordStartPos : sLineBuffer.size();
+
+        const auto iSection2CodeLength = iSectionEndPos - section2.iCodeStartPos;
+        if (iSection2CodeLength == 0) [[unlikely]] {
+            return Error(
+                std::format("no code/space between keywords on line \"{}\"", sLineBuffer),
+                pathToShaderSourceFile);
+        }
+
+        auto sCodeInSection2 = sLineBuffer.substr(section2.iCodeStartPos, iSection2CodeLength);
+
+        optionalError = processContent(section2.sKeyword, sCodeInSection2);
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError.value();
+        }
+    }
+
+    if (vTaggedSections.size() == 3) {
+        const auto& section3 = vTaggedSections[2];
+
+        // Process section 3.
+        const auto iSection3CodeLength = sLineBuffer.size() - section3.iCodeStartPos;
+
+        auto sCodeInSection3 = sLineBuffer.substr(section3.iCodeStartPos, iSection3CodeLength);
+
+        optionalError = processContent(section3.sKeyword, sCodeInSection3);
+        if (optionalError.has_value()) [[unlikely]] {
+            return optionalError.value();
+        }
+    }
+
+    return true;
+}
+
+std::variant<std::string, CombinedShaderLanguageParser::Error>
+CombinedShaderLanguageParser::parseFile( // NOLINT: too complex
     const std::filesystem::path& pathToShaderSourceFile,
     bool bParseAsHlsl,
     BindingIndicesInfo& bindingIndicesInfo,
@@ -229,33 +339,96 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
         }
 #endif
 
-        // Process GLSL keyword (if found).
         bool bFoundLanguageKeyword = false;
-        optionalError = processKeywordCode(
-            {sGlslKeyword},
+        bool bAddNewLineAfterProcessingKeywordContent = true;
+
+        // Prepare a lambda to process GLSL code.
+        const auto processGlslCode = [&](std::string_view sKeyword,
+                                         std::string& sText) -> std::optional<Error> {
+            if (bParseAsHlsl) {
+                // Ignore this block.
+                bFoundLanguageKeyword = true;
+                return {};
+            }
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+            // Find hardcoded binding indices.
+            auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
+            if (optionalError.has_value()) [[unlikely]] {
+                return Error(optionalError.value(), pathToShaderSourceFile);
+            }
+#endif
+
+            sFullSourceCode += sText;
+            if (bAddNewLineAfterProcessingKeywordContent) {
+                sFullSourceCode += "\n";
+            }
+            bFoundLanguageKeyword = true;
+
+            return {};
+        };
+
+        // Prepare a lambda to process HLSL code.
+        const auto processHlslCode = [&](std::string_view sKeyword,
+                                         std::string& sText) -> std::optional<Error> {
+            if (!bParseAsHlsl) {
+                // Ignore this block.
+                bFoundLanguageKeyword = true;
+                return {};
+            }
+
+#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
+            // Process this block's content.
+            auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
+            if (optionalError.has_value()) [[unlikely]] {
+                return Error(optionalError.value(), pathToShaderSourceFile);
+            }
+#endif
+
+            sFullSourceCode += sText;
+            if (bAddNewLineAfterProcessingKeywordContent) {
+                sFullSourceCode += "\n";
+            }
+            bFoundLanguageKeyword = true;
+
+            return {};
+        };
+
+        // See if we have a line with mixed keywords.
+        bAddNewLineAfterProcessingKeywordContent = false;
+        auto mixedLineResult = processMixedLanguageLine(
             sLineBuffer,
-            file,
             pathToShaderSourceFile,
             [&](std::string_view sKeyword, std::string& sText) -> std::optional<Error> {
-                if (bParseAsHlsl) {
-                    // Ignore this block.
-                    bFoundLanguageKeyword = true;
+                if (sKeyword == sHlslKeyword) {
+                    return processHlslCode(sKeyword, sText);
+                }
+
+                if (sKeyword == sGlslKeyword) {
+                    return processGlslCode(sKeyword, sText);
+                }
+
+                if (sKeyword == sBothKeyword || sKeyword.empty()) {
+                    sFullSourceCode += sText;
                     return {};
                 }
 
-#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
-                // Find hardcoded binding indices.
-                auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
-                if (optionalError.has_value()) [[unlikely]] {
-                    return Error(optionalError.value(), pathToShaderSourceFile);
-                }
-#endif
-
-                sFullSourceCode += sText + "\n";
-                bFoundLanguageKeyword = true;
-
-                return {};
+                return Error(
+                    std::format("unexpected keyword received \"{}\"", sKeyword), pathToShaderSourceFile);
             });
+        if (std::holds_alternative<Error>(mixedLineResult)) [[unlikely]] {
+            return std::get<Error>(std::move(mixedLineResult));
+        }
+        if (std::get<bool>(mixedLineResult)) {
+            sFullSourceCode += "\n";
+            continue;
+        }
+        bAddNewLineAfterProcessingKeywordContent = true;
+
+        // Process GLSL keyword (if found).
+        bFoundLanguageKeyword = false;
+        optionalError =
+            processKeywordCode({sGlslKeyword}, sLineBuffer, file, pathToShaderSourceFile, processGlslCode);
         if (optionalError.has_value()) [[unlikely]] {
             return std::move(optionalError.value());
         }
@@ -265,31 +438,8 @@ std::variant<std::string, CombinedShaderLanguageParser::Error> CombinedShaderLan
 
         // Process HLSL keyword (if found).
         bFoundLanguageKeyword = false;
-        optionalError = processKeywordCode(
-            {sHlslKeyword},
-            sLineBuffer,
-            file,
-            pathToShaderSourceFile,
-            [&](std::string_view sKeyword, std::string& sText) -> std::optional<Error> {
-                if (!bParseAsHlsl) {
-                    // Ignore this block.
-                    bFoundLanguageKeyword = true;
-                    return {};
-                }
-
-#if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
-                // Process this block's content.
-                auto optionalError = addHardcodedBindingIndexIfFound(bParseAsHlsl, sText, bindingIndicesInfo);
-                if (optionalError.has_value()) [[unlikely]] {
-                    return Error(optionalError.value(), pathToShaderSourceFile);
-                }
-#endif
-
-                sFullSourceCode += sText + "\n";
-                bFoundLanguageKeyword = true;
-
-                return {};
-            });
+        optionalError =
+            processKeywordCode({sHlslKeyword}, sLineBuffer, file, pathToShaderSourceFile, processHlslCode);
         if (optionalError.has_value()) [[unlikely]] {
             return std::move(optionalError.value());
         }

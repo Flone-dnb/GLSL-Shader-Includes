@@ -118,6 +118,24 @@ private:
             processContent);
 
     /**
+     * Parses a line of code that contains 2 or 3 keywords: HLSL, GLSL and a keyword for both languages,
+     * then triggers a callback on the content of each keyword.
+     *
+     * @param sLineBuffer            Line of code.
+     * @param pathToShaderSourceFile Path to file being processed.
+     * @param processContent         Callback that will be given the code after a keyword
+     * (empty keyword means that there is code before keywords).
+     *
+     * @return `false` if this line does not contain required keywords, `true` if contains and was processed
+     * without errors, otherwise an error.
+     */
+    static std::variant<bool, Error> processMixedLanguageLine(
+        std::string& sLineBuffer,
+        const std::filesystem::path& pathToShaderSourceFile,
+        const std::function<std::optional<Error>(std::string_view sKeyword, std::string& sText)>&
+            processContent);
+
+    /**
      * Starts parsing using the specified path.
      *
      * @param pathToShaderSourceFile        Path to the file to process.
@@ -307,6 +325,9 @@ private:
 
     /** Keyword used to specify HLSL code block/line. */
     static constexpr std::string_view sHlslKeyword = "#hlsl";
+
+    /** Keyword used to specify code for both GLSL and HLSL languages. */
+    static constexpr std::string_view sBothKeyword = "#both";
 
     /** Keyword used to include other files. */
     static constexpr std::string_view sIncludeKeyword = "#include";
