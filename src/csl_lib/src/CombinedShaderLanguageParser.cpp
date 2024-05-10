@@ -178,6 +178,24 @@ CombinedShaderLanguageParser::processMixedLanguageLine(
         return false;
     }
 
+    // Make sure keyword only occur once.
+    if (sLineBuffer.find(sHlslKeyword, iHlslKeywordPos + 1) != std::string::npos) [[unlikely]] {
+        return Error(
+            std::format(
+                "found keyword \"{}\" because repeated multiple times on line \"{}\" - this is not supported",
+                sHlslKeyword,
+                sLineBuffer),
+            pathToShaderSourceFile);
+    }
+    if (sLineBuffer.find(sGlslKeyword, iGlslKeywordPos + 1) != std::string::npos) [[unlikely]] {
+        return Error(
+            std::format(
+                "found keyword \"{}\" because repeated multiple times on line \"{}\" - this is not supported",
+                sGlslKeyword,
+                sLineBuffer),
+            pathToShaderSourceFile);
+    }
+
     // Prepare a struct to store info about tagged section on code (tagged as HLSL/GLSL or both).
     struct TaggedSection {
         TaggedSection() = delete;

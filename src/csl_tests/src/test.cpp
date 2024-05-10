@@ -78,6 +78,29 @@ void testCompareParsingResults(
     INFO("[TEST PASSED] directory: " + pathToDirectory.filename().string());
 }
 
+void testParsingMustFail(const std::filesystem::path& pathToDirectory) {
+    // Make sure the path exists.
+    if (!std::filesystem::exists(pathToDirectory)) [[unlikely]] {
+        INFO("expected the path \"" + pathToDirectory.string() + "\" to exist");
+        REQUIRE(false);
+    }
+
+    // Prepare path to parse.
+    const auto pathToParse = pathToDirectory / "to_parse.glsl";
+
+    // Make sure the shader file exists.
+    if (!std::filesystem::exists(pathToParse)) [[unlikely]] {
+        INFO("expected the file \"" + pathToParse.string() + "\" to exist");
+        REQUIRE(false);
+    }
+
+    auto hlslResult = CombinedShaderLanguageParser::parseHlsl(pathToParse);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(hlslResult));
+
+    auto glslResult = CombinedShaderLanguageParser::parseGlsl(pathToParse);
+    REQUIRE(std::holds_alternative<CombinedShaderLanguageParser::Error>(glslResult));
+}
+
 #if defined(ENABLE_ADDITIONAL_SHADER_CONSTANTS_KEYWORD)
 TEST_CASE("parse a sample file with additional push constants") {
     testCompareParsingResults("res/test/additional_push_constants");
@@ -113,5 +136,9 @@ TEST_CASE("parse a file with mixed keywords on the same line") {
 
 TEST_CASE("parse a file with includes inside macros") {
     testCompareParsingResults("res/test/include_inside_macro");
+}
+
+TEST_CASE("parse a file with mixed keywords on the same line but they repeat") {
+    testParsingMustFail("res/test/mixed_language_keywords_dont_repeat");
 }
 #endif

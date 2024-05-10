@@ -1,0 +1,1 @@
+#glsl layout(binding = 0) uniform #hlsl struct #both ComputeInfo #hlsl { #glsl {
