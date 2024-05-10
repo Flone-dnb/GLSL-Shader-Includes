@@ -989,12 +989,13 @@ CombinedShaderLanguageParser::findIncludePath(
     const std::filesystem::path& pathToShaderSourceFile,
     const std::vector<std::filesystem::path>& vAdditionalIncludeDirectories) {
     // Look for the include keyword.
-    if (sLineBuffer.find(sIncludeKeyword) == std::string::npos) {
+    const auto iIncludeKeywordStartPos = sLineBuffer.find(sIncludeKeyword);
+    if (iIncludeKeywordStartPos == std::string::npos) {
         return {};
     }
 
     // Remove the include keyword from the buffer.
-    sLineBuffer.erase(0, sIncludeKeyword.size());
+    sLineBuffer.erase(0, iIncludeKeywordStartPos + sIncludeKeyword.size());
 
     // Make sure that the line is not empty now.
     // Even if the line has some character (probably a space) it's still not enough.

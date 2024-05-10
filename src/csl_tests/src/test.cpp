@@ -110,4 +110,8 @@ TEST_CASE("parse a file with mixed indices and non-zero auto binding index") {
 TEST_CASE("parse a file with mixed keywords on the same line") {
     testCompareParsingResults("res/test/mixed_language_keywords");
 }
+
+TEST_CASE("parse a file with includes inside macros") {
+    testCompareParsingResults("res/test/include_inside_macro");
+}
 #endif
