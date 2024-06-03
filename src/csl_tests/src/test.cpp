@@ -6,6 +6,8 @@
 
 void testCompareParsingResults(
     const std::filesystem::path& pathToDirectory, unsigned int iBaseAutomaticBindingIndex = 0) {
+    INFO("checking directory: " + pathToDirectory.filename().string());
+
     // Make sure the path exists.
     if (!std::filesystem::exists(pathToDirectory)) [[unlikely]] {
         INFO("expected the path \"" + pathToDirectory.string() + "\" to exist");
@@ -13,11 +15,25 @@ void testCompareParsingResults(
     }
 
     // Prepare path to parse.
-    const auto pathToParse = pathToDirectory / "to_parse.glsl";
+    const auto pathToParseGlsl = pathToDirectory / "to_parse.glsl";
+    const auto pathToParseHlsl = pathToDirectory / "to_parse.hlsl";
 
-    // Make sure the shader file exists.
-    if (!std::filesystem::exists(pathToParse)) [[unlikely]] {
-        INFO("expected the file \"" + pathToParse.string() + "\" to exist");
+    const auto bGlslSourceExists = std::filesystem::exists(pathToParseGlsl);
+    const auto bHlslSourceExists = std::filesystem::exists(pathToParseHlsl);
+
+    // Make sure at least one source file exists.
+    if (!bGlslSourceExists && !bHlslSourceExists) [[unlikely]] {
+        INFO(
+            "expected the file \"" + pathToParseGlsl.string() + "\" or \"" + pathToParseHlsl.string() +
+            "\" to exist");
+        REQUIRE(false);
+    }
+
+    // Make sure both don't exist.
+    if (bGlslSourceExists && bHlslSourceExists) [[unlikely]] {
+        INFO(
+            "only 1 file should exist not both \"" + pathToParseGlsl.string() + "\" and \"" +
+            pathToParseHlsl.string() + "\"");
         REQUIRE(false);
     }
 
@@ -43,37 +59,69 @@ void testCompareParsingResults(
     }
 
     // Parse the source code.
+    std::string sActualParsedHlsl;
+    std::string sActualParsedGlsl;
+
     std::variant<std::string, CombinedShaderLanguageParser::Error> result;
-    if (bHlslResultExists) {
-        result = CombinedShaderLanguageParser::parseHlsl(pathToParse, vAdditionalIncludeDirectories);
-    } else {
+    if (bGlslSourceExists) {
+        if (bHlslResultExists) {
+            result = CombinedShaderLanguageParser::parseHlsl(pathToParseGlsl, vAdditionalIncludeDirectories);
+            if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+                const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+                INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+                REQUIRE(false);
+            }
+            sActualParsedHlsl = std::get<std::string>(std::move(result));
+        }
+
+        if (bGlslResultExists) {
+            result = CombinedShaderLanguageParser::parseGlsl(
+                pathToParseGlsl, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
+            if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+                const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+                INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+                REQUIRE(false);
+            }
+            sActualParsedGlsl = std::get<std::string>(std::move(result));
+        }
+    }
+
+    if (bHlslSourceExists) {
         result = CombinedShaderLanguageParser::parseGlsl(
-            pathToParse, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
+            pathToParseGlsl, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
+        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+            REQUIRE(false);
+        }
+        sActualParsedGlsl = std::get<std::string>(std::move(result));
     }
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
-        const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
-        INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
-        REQUIRE(false);
-    }
-    const auto sResultingCode = std::get<std::string>(std::move(result));
 
     // Compare the resulting code with the expected code.
     // (pushing the file though the parser to have constant line endings and stuff)
     if (bHlslResultExists) {
         result = CombinedShaderLanguageParser::parseHlsl(pathToResultAsHlsl);
-    } else {
+
+        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+            REQUIRE(false);
+        }
+        const auto sExpectedHlsl = std::get<std::string>(std::move(result));
+        REQUIRE(sActualParsedHlsl == sExpectedHlsl);
+    }
+
+    if (bGlslResultExists) {
         result = CombinedShaderLanguageParser::parseGlsl(pathToResultAsGlsl);
-    }
-    if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
-        const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
-        INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
-        REQUIRE(false);
-    }
-    const auto sExpectedCode = std::get<std::string>(std::move(result));
 
-    INFO("checking directory: " + pathToDirectory.filename().string());
-
-    REQUIRE(sResultingCode == sExpectedCode);
+        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+            REQUIRE(false);
+        }
+        const auto sExpectedGlsl = std::get<std::string>(std::move(result));
+        REQUIRE(sActualParsedGlsl == sExpectedGlsl);
+    }
 
     INFO("[TEST PASSED] directory: " + pathToDirectory.filename().string());
 }
