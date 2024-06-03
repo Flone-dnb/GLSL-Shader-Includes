@@ -345,6 +345,11 @@ CombinedShaderLanguageParser::parseFile( // NOLINT: too complex
 
                 if (bParseAsHlsl) {
                     convertGlslTypesToHlslTypes(sText);
+                } else {
+                    auto convertError = convertHlslTypesToGlslTypes(sLineBuffer);
+                    if (convertError.has_value()) [[unlikely]] {
+                        return Error(convertError.value(), pathToShaderSourceFile);
+                    }
                 }
                 vFoundAdditionalShaderConstants.push_back(sText);
                 return {};
@@ -483,9 +488,14 @@ CombinedShaderLanguageParser::parseFile( // NOLINT: too complex
             }
 #endif
 
-            // Convert GLSL types to HLSL.
+            // Convert types.
             if (bParseAsHlsl) {
                 convertGlslTypesToHlslTypes(sLineBuffer);
+            } else {
+                auto convertError = convertHlslTypesToGlslTypes(sLineBuffer);
+                if (convertError.has_value()) [[unlikely]] {
+                    return Error(convertError.value(), pathToShaderSourceFile);
+                }
             }
 
             // Append the line to the final source code string.
@@ -537,6 +547,16 @@ void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGls
             "shared ")) { // avoid replacing `groupshared` to `groupgroupshared` because it matches `shared`
         replaceSubstring(sGlslLine, "shared ", "groupshared ");
     }
+}
+
+std::optional<std::string> CombinedShaderLanguageParser::convertHlslTypesToGlslTypes(std::string& sHlslLine) {
+    // `mul` to `operator*`.
+    auto optionalError = replaceHlslMulToGlsl(sHlslLine);
+    if (optionalError.has_value()) [[unlikely]] {
+        return optionalError;
+    }
+
+    return {};
 }
 
 #if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
@@ -982,6 +1002,65 @@ void CombinedShaderLanguageParser::replaceSubstring(
         // Increment current position.
         iCurrentPosition += sReplaceTo.size();
     } while (iCurrentPosition < sText.size());
+}
+
+std::optional<std::string> CombinedShaderLanguageParser::replaceHlslMulToGlsl(std::string& sHlslCode) {
+    // Find keyword.
+    const auto iMulPos = sHlslCode.find("mul");
+    if (iMulPos == std::string::npos) {
+        return {};
+    }
+
+    // Create resulting string.
+    std::string sResultingHlslCode;
+    sResultingHlslCode.reserve(sHlslCode.size());
+
+    // Copy everything before keyword.
+    for (size_t i = 0; i < iMulPos; i++) {
+        sResultingHlslCode += sHlslCode[i];
+    }
+
+    size_t iCurrentPos = iMulPos + 3; // skip keyword
+
+    // Copy next char.
+    sResultingHlslCode.push_back(sHlslCode[iCurrentPos]);
+    iCurrentPos += 1;
+
+    // Make sure it's a bracket.
+    if (sResultingHlslCode.back() != '(') [[unlikely]] {
+        return std::format("expected to find a '(' after the keyword \"mul\" in line \"{}\"", sHlslCode);
+    }
+
+    // Find `,` between these brackets and replace it with `*` but consider inner brackets.
+    size_t iBracketLevel = 1;
+    while (iCurrentPos < sHlslCode.size()) {
+        sResultingHlslCode.push_back(sHlslCode[iCurrentPos]);
+
+        if (sResultingHlslCode.back() == '(') {
+            iBracketLevel += 1;
+        } else if (sResultingHlslCode.back() == ')') {
+            if (iBracketLevel == 0) [[unlikely]] {
+                return std::format(
+                    "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
+            }
+
+            iBracketLevel -= 1;
+        } else if (sResultingHlslCode.back() == ',' && iBracketLevel == 1) {
+            sResultingHlslCode[sResultingHlslCode.size() - 1] = ' ';
+            sResultingHlslCode.push_back('*');
+        }
+
+        iCurrentPos += 1;
+    }
+
+    if (iBracketLevel != 0) [[unlikely]] {
+        return std::format(
+            "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
+    }
+
+    sHlslCode = sResultingHlslCode;
+
+    return {};
 }
 
 std::variant<unsigned int, std::string>

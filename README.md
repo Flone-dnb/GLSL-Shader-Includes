@@ -88,17 +88,20 @@ What this parser does:
 
 # Performed conversions
 
-Here is the list of all conversions from GLSL to HLSL that this parser does:
+Here is the list of all conversions that this parser does:
 
-- `vecN` to `floatN`
-- `matN` to `floatNxN`
-- `shared` to `groupshared` (for compute shaders)
-- cast functions:
-    - `floatBitsToUint` to `asuint`
-    - `uintBitsToFloat` to `asfloat`
-- atomic functions:
-    - `atomicMin` to `InterlockedMin`
-    - `atomicMax` to `InterlockedMax`
+- GLSL to HLSL:
+    - `vecN` to `floatN`
+    - `matN` to `floatNxN`
+    - `shared` to `groupshared` (for compute shaders)
+    - cast functions:
+        - `floatBitsToUint` to `asuint`
+        - `uintBitsToFloat` to `asfloat`
+    - atomic functions:
+        - `atomicMin` to `InterlockedMin`
+        - `atomicMax` to `InterlockedMax`
+- HLSL to GLSL:
+    - `mul` to `operator*`
 
 # Using this project
 

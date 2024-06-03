@@ -202,6 +202,15 @@ private:
      */
     static void convertGlslTypesToHlslTypes(std::string& sGlslLine);
 
+    /**
+     * Modifies the input string with HLSL types replaced to GLSL types (for example `mul` to operator*).
+     *
+     * @param sHlslLine Line of HLSL code.
+     *
+     * @return Error if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string> convertHlslTypesToGlslTypes(std::string& sHlslLine);
+
 #if defined(ENABLE_AUTOMATIC_BINDING_INDICES)
     /**
      * Replaces all occurrences of @ref sAssignBindingIndexKeyword with an unused binding index.
@@ -293,6 +302,15 @@ private:
      */
     static void
     replaceSubstring(std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo);
+
+    /**
+     * Looks for `mul` in the specified code and replaces it with GLSL operator*.
+     *
+     * @param sHlslCode Line of HLSL code.
+     *
+     * @return Error if something went wrong.
+     */
+    [[nodiscard]] static std::optional<std::string> replaceHlslMulToGlsl(std::string& sHlslCode);
 
     /**
      * Reads digits from the specified position of the specified string until non-digit character is found.

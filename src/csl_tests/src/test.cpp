@@ -88,7 +88,7 @@ void testCompareParsingResults(
 
     if (bHlslSourceExists) {
         result = CombinedShaderLanguageParser::parseGlsl(
-            pathToParseGlsl, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
+            pathToParseHlsl, iBaseAutomaticBindingIndex, vAdditionalIncludeDirectories);
         if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
             const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
             INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
@@ -196,3 +196,5 @@ TEST_CASE("parse a file with cast keywords") { testCompareParsingResults("res/te
 TEST_CASE("parse a file with atomic functions") {
     testCompareParsingResults("res/test/glsl_to_hlsl_atomics");
 }
+
+TEST_CASE("convert HLSL mul to operator*") { testCompareParsingResults("res/test/mul_to_operator"); }
