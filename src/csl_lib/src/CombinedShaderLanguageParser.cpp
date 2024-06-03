@@ -512,13 +512,23 @@ CombinedShaderLanguageParser::parseFile( // NOLINT: too complex
 }
 
 void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGlslLine) {
+    // Vectors.
     replaceSubstring(sGlslLine, "vec2", "float2");
     replaceSubstring(sGlslLine, "vec3", "float3");
     replaceSubstring(sGlslLine, "vec4", "float4");
 
+    // Matrices.
     replaceSubstring(sGlslLine, "mat2", "float2x2");
     replaceSubstring(sGlslLine, "mat3", "float3x3");
     replaceSubstring(sGlslLine, "mat4", "float4x4");
+
+    // Cast functions.
+    replaceSubstring(sGlslLine, "floatBitsToUint(", "asuint(");
+    replaceSubstring(sGlslLine, "uintBitsToFloat(", "asfloat(");
+
+    // Atomic functions.
+    replaceSubstring(sGlslLine, "atomicMin(", "InterlockedMin(");
+    replaceSubstring(sGlslLine, "atomicMax(", "InterlockedMax(");
 
     // Replacing `matnxm` will be wrong since GLSL and HLSL have different row/column specification.
     // TODO: think about this in the future

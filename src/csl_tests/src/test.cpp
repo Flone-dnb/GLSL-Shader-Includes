@@ -129,6 +129,7 @@ TEST_CASE("parse a file with hardcoded binding indices before parser-assigned") 
 TEST_CASE("parse a file with mixed indices and non-zero auto binding index") {
     testCompareParsingResults("res/test/non_zero_base_auto_binding_index", 100);
 }
+#endif
 
 TEST_CASE("parse a file with mixed keywords on the same line") {
     testCompareParsingResults("res/test/mixed_language_keywords");
@@ -141,4 +142,9 @@ TEST_CASE("parse a file with includes inside macros") {
 TEST_CASE("parse a file with mixed keywords on the same line but they repeat") {
     testParsingMustFail("res/test/mixed_language_keywords_dont_repeat");
 }
-#endif
+
+TEST_CASE("parse a file with cast keywords") { testCompareParsingResults("res/test/glsl_to_hlsl_casts"); }
+
+TEST_CASE("parse a file with atomic functions") {
+    testCompareParsingResults("res/test/glsl_to_hlsl_atomics");
+}

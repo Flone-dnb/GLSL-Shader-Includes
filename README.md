@@ -86,8 +86,6 @@ What this parser does:
     - When `parseGlsl` meets `#glsl` block of code it removes the `#glsl` keyword (in the memory while reading) and just reads the code that was specified in the `#glsl` block without doing any type conversions.
 - Allows specifying `binding = ?` in GLSL code and `register(b?)` in HLSL code (`b` register is used as an example, you can use any: `b`, `u`, etc) to assign a free (unused) binding index while parsing.
 
-As you can see from the list above this parser does some GLSL -> HLSL conversions but not the other way. Keep that in mind.
-
 # Performed conversions
 
 Here is the list of all conversions from GLSL to HLSL that this parser does:
@@ -95,6 +93,12 @@ Here is the list of all conversions from GLSL to HLSL that this parser does:
 - `vecN` to `floatN`
 - `matN` to `floatNxN`
 - `shared` to `groupshared` (for compute shaders)
+- cast functions:
+    - `floatBitsToUint` to `asuint`
+    - `uintBitsToFloat` to `asfloat`
+- atomic functions:
+    - `atomicMin` to `InterlockedMin`
+    - `atomicMax` to `InterlockedMax`
 
 # Using this project
 
