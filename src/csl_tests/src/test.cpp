@@ -198,3 +198,5 @@ TEST_CASE("parse a file with atomic functions") {
 }
 
 TEST_CASE("convert HLSL mul to operator*") { testCompareParsingResults("res/test/mul_to_operator"); }
+
+TEST_CASE("convert HLSL sync functions to GLSL") { testCompareParsingResults("res/test/sync_funcs"); }

@@ -556,6 +556,9 @@ std::optional<std::string> CombinedShaderLanguageParser::convertHlslTypesToGlslT
         return optionalError;
     }
 
+    // Replace compute sync functions.
+    replaceSubstring(sHlslLine, "GroupMemoryBarrierWithGroupSync();", "groupMemoryBarrier(); barrier();");
+
     return {};
 }
 

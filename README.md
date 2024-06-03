@@ -102,6 +102,7 @@ Here is the list of all conversions that this parser does:
         - `atomicMax` to `InterlockedMax`
 - HLSL to GLSL:
     - `mul` to `operator*`
+    - `GroupMemoryBarrierWithGroupSync();` to `groupMemoryBarrier(); barrier();`
 
 # Using this project
 
