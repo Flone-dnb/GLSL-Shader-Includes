@@ -95,6 +95,14 @@ void testCompareParsingResults(
             REQUIRE(false);
         }
         sActualParsedGlsl = std::get<std::string>(std::move(result));
+
+        result = CombinedShaderLanguageParser::parseHlsl(pathToParseHlsl, vAdditionalIncludeDirectories);
+        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
+            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
+            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
+            REQUIRE(false);
+        }
+        sActualParsedHlsl = std::get<std::string>(std::move(result));
     }
 
     // Compare the resulting code with the expected code.
