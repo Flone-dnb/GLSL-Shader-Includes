@@ -1,6 +1,6 @@
 struct FrameData{
-    mat4 worldMatrix;
+    float4x4 worldMatrix;
 }; ConstantBuffer<FrameData> frameData : register(b1);
 
 
-#hlsl ConstantBuffer<uint> someData : register(b0);
+ConstantBuffer<uint> someData : register(b0);

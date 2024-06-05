@@ -294,14 +294,14 @@ private:
 #endif
 
     /**
-     * Replaces all occurrences of the specified "replace from" text to "replace to" text.
+     * Replaces all occurrences of the specified "replace from" keyword to "replace to" keyword.
      *
      * @param sText        Text to modify.
      * @param sReplaceFrom Text to replace.
      * @param sReplaceTo   Text to place instead of replaced.
      */
     static void
-    replaceSubstring(std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo);
+    replaceKeyword(std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo);
 
     /**
      * Looks for `mul` in the specified code and replaces it with GLSL operator*.

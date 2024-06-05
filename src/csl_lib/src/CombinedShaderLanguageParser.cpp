@@ -523,29 +523,29 @@ CombinedShaderLanguageParser::parseFile( // NOLINT: too complex
 
 void CombinedShaderLanguageParser::convertGlslTypesToHlslTypes(std::string& sGlslLine) {
     // Vectors.
-    replaceSubstring(sGlslLine, "vec2", "float2");
-    replaceSubstring(sGlslLine, "vec3", "float3");
-    replaceSubstring(sGlslLine, "vec4", "float4");
+    replaceKeyword(sGlslLine, "vec2", "float2");
+    replaceKeyword(sGlslLine, "vec3", "float3");
+    replaceKeyword(sGlslLine, "vec4", "float4");
 
     // Matrices.
-    replaceSubstring(sGlslLine, "mat2", "float2x2");
-    replaceSubstring(sGlslLine, "mat3", "float3x3");
-    replaceSubstring(sGlslLine, "mat4", "float4x4");
+    replaceKeyword(sGlslLine, "mat2", "float2x2");
+    replaceKeyword(sGlslLine, "mat3", "float3x3");
+    replaceKeyword(sGlslLine, "mat4", "float4x4");
 
     // Cast functions.
-    replaceSubstring(sGlslLine, "floatBitsToUint(", "asuint(");
-    replaceSubstring(sGlslLine, "uintBitsToFloat(", "asfloat(");
+    replaceKeyword(sGlslLine, "floatBitsToUint(", "asuint(");
+    replaceKeyword(sGlslLine, "uintBitsToFloat(", "asfloat(");
 
     // Atomic functions.
-    replaceSubstring(sGlslLine, "atomicMin(", "InterlockedMin(");
-    replaceSubstring(sGlslLine, "atomicMax(", "InterlockedMax(");
+    replaceKeyword(sGlslLine, "atomicMin(", "InterlockedMin(");
+    replaceKeyword(sGlslLine, "atomicMax(", "InterlockedMax(");
 
     // Replacing `matnxm` will be wrong since GLSL and HLSL have different row/column specification.
     // TODO: think about this in the future
 
     if (sGlslLine.starts_with(
             "shared ")) { // avoid replacing `groupshared` to `groupgroupshared` because it matches `shared`
-        replaceSubstring(sGlslLine, "shared ", "groupshared ");
+        replaceKeyword(sGlslLine, "shared ", "groupshared ");
     }
 }
 
@@ -557,7 +557,7 @@ std::optional<std::string> CombinedShaderLanguageParser::convertHlslTypesToGlslT
     }
 
     // Replace compute sync functions.
-    replaceSubstring(sHlslLine, "GroupMemoryBarrierWithGroupSync();", "groupMemoryBarrier(); barrier();");
+    replaceKeyword(sHlslLine, "GroupMemoryBarrierWithGroupSync();", "groupMemoryBarrier(); barrier();");
 
     return {};
 }
@@ -984,16 +984,35 @@ std::optional<std::string> CombinedShaderLanguageParser::addHardcodedBindingInde
 }
 #endif
 
-void CombinedShaderLanguageParser::replaceSubstring(
+void CombinedShaderLanguageParser::replaceKeyword(
     std::string& sText, std::string_view sReplaceFrom, std::string_view sReplaceTo) {
     // Prepare initial position.
     size_t iCurrentPosition = 0;
+
+    const auto iCommentStartPos = sText.find("//");
 
     do {
         // Find text to replace.
         iCurrentPosition = sText.find(sReplaceFrom, iCurrentPosition);
         if (iCurrentPosition == std::string::npos) {
             return;
+        }
+
+        if (iCurrentPosition != 0) {
+            // Maybe this isn't a keyword but part of some text (variable name for example).
+            char& prevChar = sText[iCurrentPosition - 1];
+            if (prevChar != ' ' && prevChar != '\t') {
+                // Part of some text (not a keyword).
+                iCurrentPosition += 1;
+                continue;
+            }
+
+            // Maybe this isn't a keyword but part of a comment.
+            if (iCommentStartPos != std::string::npos && iCommentStartPos < iCurrentPosition) {
+                // Part of a comment (not a keyword).
+                iCurrentPosition += 1;
+                continue;
+            }
         }
 
         // Erase old text.
@@ -1008,60 +1027,68 @@ void CombinedShaderLanguageParser::replaceSubstring(
 }
 
 std::optional<std::string> CombinedShaderLanguageParser::replaceHlslMulToGlsl(std::string& sHlslCode) {
-    // Find keyword.
-    const auto iMulPos = sHlslCode.find("mul");
-    if (iMulPos == std::string::npos) {
-        return {};
-    }
+    size_t iCurrentPosition = 0;
 
-    // Create resulting string.
-    std::string sResultingHlslCode;
-    sResultingHlslCode.reserve(sHlslCode.size());
+    const auto iCommentStartPos = sHlslCode.find("//");
 
-    // Copy everything before keyword.
-    for (size_t i = 0; i < iMulPos; i++) {
-        sResultingHlslCode += sHlslCode[i];
-    }
-
-    size_t iCurrentPos = iMulPos + 3; // skip keyword
-
-    // Copy next char.
-    sResultingHlslCode.push_back(sHlslCode[iCurrentPos]);
-    iCurrentPos += 1;
-
-    // Make sure it's a bracket.
-    if (sResultingHlslCode.back() != '(') [[unlikely]] {
-        return std::format("expected to find a '(' after the keyword \"mul\" in line \"{}\"", sHlslCode);
-    }
-
-    // Find `,` between these brackets and replace it with `*` but consider inner brackets.
-    size_t iBracketLevel = 1;
-    while (iCurrentPos < sHlslCode.size()) {
-        sResultingHlslCode.push_back(sHlslCode[iCurrentPos]);
-
-        if (sResultingHlslCode.back() == '(') {
-            iBracketLevel += 1;
-        } else if (sResultingHlslCode.back() == ')') {
-            if (iBracketLevel == 0) [[unlikely]] {
-                return std::format(
-                    "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
-            }
-
-            iBracketLevel -= 1;
-        } else if (sResultingHlslCode.back() == ',' && iBracketLevel == 1) {
-            sResultingHlslCode[sResultingHlslCode.size() - 1] = ' ';
-            sResultingHlslCode.push_back('*');
+    while (iCurrentPosition < sHlslCode.size()) {
+        // Find keyword.
+        iCurrentPosition = sHlslCode.find("mul");
+        if (iCurrentPosition == std::string::npos) {
+            return {};
         }
 
-        iCurrentPos += 1;
-    }
+        if (iCurrentPosition != 0) {
+            // Maybe this isn't a keyword but part of some text (variable name for example).
+            char& prevChar = sHlslCode[iCurrentPosition - 1];
+            if (prevChar != ' ' && prevChar != '\t') {
+                // Part of some text (not a keyword).
+                iCurrentPosition += 1;
+                continue;
+            }
 
-    if (iBracketLevel != 0) [[unlikely]] {
-        return std::format(
-            "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
-    }
+            // Maybe this isn't a keyword but part of a comment.
+            if (iCommentStartPos != std::string::npos && iCommentStartPos < iCurrentPosition) {
+                // Part of a comment (not a keyword).
+                iCurrentPosition += 1;
+                continue;
+            }
+        }
 
-    sHlslCode = sResultingHlslCode;
+        // Erase keyword.
+        sHlslCode.erase(iCurrentPosition, 3);
+
+        // Make sure next comes a bracket.
+        if (sHlslCode[iCurrentPosition] != '(') [[unlikely]] {
+            return std::format("expected to find a '(' after the keyword \"mul\" in line \"{}\"", sHlslCode);
+        }
+
+        iCurrentPosition += 1;
+
+        // Find `,` between these brackets and replace it with `*` but consider inner brackets.
+        size_t iBracketLevel = 1;
+        while (iCurrentPosition < sHlslCode.size() && iBracketLevel != 0) {
+            if (sHlslCode[iCurrentPosition] == '(') {
+                iBracketLevel += 1;
+            } else if (sHlslCode[iCurrentPosition] == ')') {
+                if (iBracketLevel == 0) [[unlikely]] {
+                    return std::format(
+                        "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
+                }
+
+                iBracketLevel -= 1;
+            } else if (sHlslCode[iCurrentPosition] == ',' && iBracketLevel == 1) {
+                sHlslCode[iCurrentPosition] = '*';
+            }
+
+            iCurrentPosition += 1;
+        }
+
+        if (iBracketLevel != 0) [[unlikely]] {
+            return std::format(
+                "found mismatch between the number brackets '(' and ')' in line \"{}\"", sHlslCode);
+        }
+    }
 
     return {};
 }

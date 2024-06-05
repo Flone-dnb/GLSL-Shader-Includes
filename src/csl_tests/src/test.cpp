@@ -1,3 +1,6 @@
+// Standard.
+#include <fstream>
+
 // Custom.
 #include "CombinedShaderLanguageParser.h"
 
@@ -108,26 +111,32 @@ void testCompareParsingResults(
     // Compare the resulting code with the expected code.
     // (pushing the file though the parser to have constant line endings and stuff)
     if (bHlslResultExists) {
-        result = CombinedShaderLanguageParser::parseHlsl(pathToResultAsHlsl);
+        std::ifstream file(pathToResultAsHlsl);
+        REQUIRE(file.is_open());
 
-        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
-            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
-            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
-            REQUIRE(false);
+        std::string sExpectedHlsl;
+        std::string sLineBuffer;
+        while (std::getline(file, sLineBuffer)) {
+            sExpectedHlsl += sLineBuffer + "\n";
         }
-        const auto sExpectedHlsl = std::get<std::string>(std::move(result));
+
+        file.close();
+
         REQUIRE(sActualParsedHlsl == sExpectedHlsl);
     }
 
     if (bGlslResultExists) {
-        result = CombinedShaderLanguageParser::parseGlsl(pathToResultAsGlsl);
+        std::ifstream file(pathToResultAsGlsl);
+        REQUIRE(file.is_open());
 
-        if (std::holds_alternative<CombinedShaderLanguageParser::Error>(result)) [[unlikely]] {
-            const auto error = std::get<CombinedShaderLanguageParser::Error>(std::move(result));
-            INFO(std::format("{} | path: {}", error.sErrorMessage, error.pathToErrorFile.string()));
-            REQUIRE(false);
+        std::string sExpectedGlsl;
+        std::string sLineBuffer;
+        while (std::getline(file, sLineBuffer)) {
+            sExpectedGlsl += sLineBuffer + "\n";
         }
-        const auto sExpectedGlsl = std::get<std::string>(std::move(result));
+
+        file.close();
+
         REQUIRE(sActualParsedGlsl == sExpectedGlsl);
     }
 
