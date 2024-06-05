@@ -1056,18 +1056,21 @@ std::optional<std::string> CombinedShaderLanguageParser::replaceHlslMulToGlsl(st
             }
         }
 
+        // Make sure next comes a bracket.
+        if (sHlslCode[iCurrentPosition + 3] != '(') {
+            // Not a keyword.
+            iCurrentPosition += 1;
+            continue;
+        }
+
         // Erase keyword.
         sHlslCode.erase(iCurrentPosition, 3);
 
-        // Make sure next comes a bracket.
-        if (sHlslCode[iCurrentPosition] != '(') [[unlikely]] {
-            return std::format("expected to find a '(' after the keyword \"mul\" in line \"{}\"", sHlslCode);
-        }
-
+        // Skip open bracket.
         iCurrentPosition += 1;
+        size_t iBracketLevel = 1;
 
         // Find `,` between these brackets and replace it with `*` but consider inner brackets.
-        size_t iBracketLevel = 1;
         while (iCurrentPosition < sHlslCode.size() && iBracketLevel != 0) {
             if (sHlslCode[iCurrentPosition] == '(') {
                 iBracketLevel += 1;
