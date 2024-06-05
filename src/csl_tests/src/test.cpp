@@ -7,6 +7,28 @@
 // External.
 #include "catch2/catch_test_macros.hpp"
 
+std::string getDiff(const std::string& sActual, const std::string& sExpected) {
+    std::string sDiff;
+    sDiff.reserve(sExpected.size());
+
+    size_t iCurrentPos = 0;
+    while (iCurrentPos < sExpected.size() && iCurrentPos < sActual.size()) {
+        sDiff += sActual[iCurrentPos];
+
+        if (sActual[iCurrentPos] != sExpected[iCurrentPos]) {
+            sDiff += std::format(
+                "<- DIFFERENCE HERE, FOUND: '{}', EXPECTED: '{}'",
+                sActual[iCurrentPos],
+                sExpected[iCurrentPos]);
+            break;
+        }
+
+        iCurrentPos += 1;
+    }
+
+    return sDiff;
+}
+
 void testCompareParsingResults(
     const std::filesystem::path& pathToDirectory, unsigned int iBaseAutomaticBindingIndex = 0) {
     INFO("checking directory: " + pathToDirectory.filename().string());
@@ -122,7 +144,10 @@ void testCompareParsingResults(
 
         file.close();
 
-        REQUIRE(sActualParsedHlsl == sExpectedHlsl);
+        if (sActualParsedHlsl != sExpectedHlsl) {
+            INFO("actual HLSL != expected HLSL:\n" + getDiff(sActualParsedHlsl, sExpectedHlsl));
+            REQUIRE(false);
+        }
     }
 
     if (bGlslResultExists) {
@@ -137,7 +162,10 @@ void testCompareParsingResults(
 
         file.close();
 
-        REQUIRE(sActualParsedGlsl == sExpectedGlsl);
+        if (sActualParsedGlsl != sExpectedGlsl) {
+            INFO("actual GLSL != expected GLSL:\n" + getDiff(sActualParsedGlsl, sExpectedGlsl));
+            REQUIRE(false);
+        }
     }
 
     INFO("[TEST PASSED] directory: " + pathToDirectory.filename().string());

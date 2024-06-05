@@ -1001,7 +1001,8 @@ void CombinedShaderLanguageParser::replaceKeyword(
         if (iCurrentPosition != 0) {
             // Maybe this isn't a keyword but part of some text (variable name for example).
             char& prevChar = sText[iCurrentPosition - 1];
-            if (prevChar != ' ' && prevChar != '\t') {
+            if ((prevChar >= '0' && prevChar <= '9') || (prevChar >= 'a' && prevChar <= 'z') ||
+                (prevChar >= 'A' && prevChar <= 'Z')) {
                 // Part of some text (not a keyword).
                 iCurrentPosition += 1;
                 continue;

@@ -1,18 +1,19 @@
-    #version 450
-    #extension GL_ARB_separate_shader_objects : enable
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
 
 layout(binding = 0) uniform FrameData {
-    mat4 worldMatrix;
+        mat4 worldMatrix;
 } frameData;
 
 
-    struct Nested{
+    struct Nested {
         uint test;
     }
 
 shared uint iGroupSharedVariable;
 
-void foo(){
+void foo() {
     mat4 matrix = frameData.worldMatrix;
     vec3 someVec = vec3(0.0F, 0.0F, 0.0F);
+    bar(vec3(myvec2, 0.0));
 }

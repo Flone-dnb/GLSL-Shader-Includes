@@ -1,6 +1,6 @@
 
-struct FrameData{
-    float4x4 worldMatrix;
+struct FrameData {
+        float4x4 worldMatrix;
 }; ConstantBuffer<FrameData> frameData : register(b0);
 
 ConstantBuffer<uint> someData : register(b0, space5);
@@ -10,7 +10,8 @@ ConstantBuffer<uint> someData2 : register(b1, space0);
 
 groupshared uint iGroupSharedVariable;
 
-void foo(){
+void foo() {
     float4x4 matrix = frameData.worldMatrix;
     float3 someVec = float3(0.0F, 0.0F, 0.0F);
+    bar(float3(myvec2, 0.0));
 }
