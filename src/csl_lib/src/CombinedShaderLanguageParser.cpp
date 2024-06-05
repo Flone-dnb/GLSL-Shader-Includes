@@ -1033,7 +1033,7 @@ std::optional<std::string> CombinedShaderLanguageParser::replaceHlslMulToGlsl(st
 
     while (iCurrentPosition < sHlslCode.size()) {
         // Find keyword.
-        iCurrentPosition = sHlslCode.find("mul");
+        iCurrentPosition = sHlslCode.find("mul", iCurrentPosition);
         if (iCurrentPosition == std::string::npos) {
             return {};
         }
