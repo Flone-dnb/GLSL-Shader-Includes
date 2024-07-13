@@ -35,6 +35,13 @@ public:
     };
 
     /**
+     * Returns hash of the git commit that was used to build this project.
+     *
+     * @return Commit hash.
+     */
+    static constexpr std::string_view getCommitHash() { return CSLP_GIT_COMMIT_HASH; }
+
+    /**
      * Parses the specified file as HLSL code (`#glsl` blocks are ignored and not included).
      *
      * @param pathToShaderSourceFile        Path to the file to process.

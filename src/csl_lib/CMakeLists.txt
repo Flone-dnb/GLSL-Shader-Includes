@@ -61,6 +61,15 @@ target_include_directories(${PROJECT_NAME} PUBLIC src)
 #                                           TOOLS
 # -------------------------------------------------------------------------------------------------
 
+# Define git commit hash macro.
+execute_process(
+    COMMAND git log -1 --format=%h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    OUTPUT_VARIABLE CSLP_LAST_GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+target_compile_definitions(${PROJECT_NAME} PUBLIC CSLP_GIT_COMMIT_HASH="${CSLP_LAST_GIT_COMMIT_HASH}")
+
 # Enable Address Sanitizer in `Debug` builds on non-Windows OS.
 if(NOT IS_RELEASE_BUILD AND NOT WIN32)
     enable_address_sanitizer()
